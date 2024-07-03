@@ -1,0 +1,22 @@
+[package]
+name = "fdb-c"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+fdb_510 = []
+fdb_520 = []
+fdb_600 = []
+fdb_610 = []
+fdb_620 = []
+fdb_630 = []
+fdb_700 = []
+fdb_710 = []
+fdb_730 = []
+
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "0.69.4"
+cfg-if = "1.0.0"
