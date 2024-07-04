@@ -1,16 +1,23 @@
 use std::ffi::CStr;
 use std::fmt::{Debug, Display, Formatter};
 use std::future::Future;
+use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
+use std::os::raw::c_char;
 use std::pin::Pin;
+use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::OnceLock;
 use std::task::{Context, Poll};
+
 use futures::poll;
+use log::{error, info, warn};
 use thiserror::Error;
-use fdb_c::{FDB_API_VERSION, fdb_error_t, fdb_network_set_option, FDBNetworkOption};
-use log::{error, info, log, warn};
 use tokio::task;
 
+use fdb_c::{
+    FDB_API_VERSION, fdb_error_t, FDB_future, fdb_network_set_option, FDBKey, FDBKeyValue,
+    FDBNetworkOption,
+};
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -23,11 +30,8 @@ pub enum Error {
     #[error("THe network must only be initialized once")]
     NetworkSingletonViolated,
     #[error("Action not possible before the network is configured")]
-    ActionInvalidBeforeNetworkConfig
-
+    ActionInvalidBeforeNetworkConfig,
 }
-
-
 
 #[derive(Eq, PartialEq)]
 pub struct FdbErrorCode(fdb_error_t);
@@ -40,8 +44,8 @@ impl Debug for FdbErrorCode {
 
 impl Display for FdbErrorCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let msg = unsafe {fdb_c::fdb_get_error(self.0)};
-        let msg = unsafe { CStr::from_ptr(msg)};
+        let msg = unsafe { fdb_c::fdb_get_error(self.0) };
+        let msg = unsafe { CStr::from_ptr(msg) };
         let msg = msg.to_str().unwrap();
 
         write!(f, "{:?} ({})", msg, self.0)
@@ -55,19 +59,20 @@ impl From<FdbErrorCode> for Error {
             2201 => Error::APIVersionSingletonViolated,
             2009 => Error::NetworkSingletonViolated,
             2008 => Error::ActionInvalidBeforeNetworkConfig,
-            _ => Error::Generic(FdbErrorCode(value.0))
+            _ => Error::Generic(FdbErrorCode(value.0)),
         }
     }
 }
 
-const API_VERSION_SET : AtomicBool = AtomicBool::new(false);
+static API_VERSION_SET: AtomicBool = AtomicBool::new(false);
 
 fn select_api_version(version: i32) -> Result<(), Error> {
-
-    let first_time = API_VERSION_SET.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok();
+    let first_time = API_VERSION_SET
+        .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+        .is_ok();
 
     if !first_time {
-        return Err(Error::APIVersionSingletonViolated)
+        return Err(Error::APIVersionSingletonViolated);
     }
 
     if version > FDB_API_VERSION as i32 || version > get_max_api_version() {
@@ -78,15 +83,13 @@ fn select_api_version(version: i32) -> Result<(), Error> {
         warn!("Selected API version should almost always be equal to the foundation db version feature")
     }
 
-    let result = unsafe {fdb_c::fdb_select_api_version_impl(version, FDB_API_VERSION as i32) };
+    let result = unsafe { fdb_c::fdb_select_api_version_impl(version, FDB_API_VERSION as i32) };
 
     if result != 0 {
         error!("{result}");
         return Err(FdbErrorCode(result).into());
-
     }
     Ok(())
-
 }
 
 fn get_max_api_version() -> i32 {
@@ -100,18 +103,14 @@ struct FDBNetworkOptions;
 #[derive(Debug)]
 struct Client;
 
-
-const NETWORK_SETUP: AtomicBool = AtomicBool::new(false);
-const NETWORK_STARTED : AtomicBool = AtomicBool::new(false);
+static NETWORK_SETUP: AtomicBool = AtomicBool::new(false);
+static NETWORK_STARTED: AtomicBool = AtomicBool::new(false);
 impl Client {
     async fn new() -> Result<Self, Error> {
-
         // Init network
         Self::setup_network(FDBNetworkOptions)?;
 
-        let handle: task::JoinHandle<_> = task::spawn_blocking(|| {
-            Self::run_network()
-        });
+        let handle: task::JoinHandle<_> = task::spawn_blocking(|| Self::run_network());
 
         // Poll the network once to check if it errored on initialization
         let poll = poll!(handle);
@@ -122,7 +121,7 @@ impl Client {
         Ok(Self)
     }
     /// Idempotent singleton network setup
-    fn setup_network(options: FDBNetworkOptions) -> Result<() , Error> {
+    fn setup_network(options: FDBNetworkOptions) -> Result<(), Error> {
         // TODO: Options
         // Set options
         // let options: Vec<FDBNetworkOption> = options.into();
@@ -132,22 +131,22 @@ impl Client {
         // }
 
         // Setup network
-        let first_time = NETWORK_SETUP.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok();
+        let first_time = NETWORK_SETUP
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok();
         if !first_time {
             // Network already setup
-            return Ok(())
+            return Ok(());
         }
 
-        let result = unsafe  { fdb_c::fdb_setup_network() };
+        let result = unsafe { fdb_c::fdb_setup_network() };
 
         if result != 0 {
             error!("{result}");
             return Err(FdbErrorCode(result).into());
-
         }
 
         Ok(())
-
     }
     /// Initializes the network.
     /// Will not return until stop_network() is called by you or a serious error occurs.
@@ -155,11 +154,12 @@ impl Client {
     ///
     /// Idempotent & Singleton.
     fn run_network() -> Result<(), Error> {
-
-        let first_time = NETWORK_STARTED.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok();
+        let first_time = NETWORK_STARTED
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok();
         if !first_time {
             // Network is already running
-            return Ok(())
+            return Ok(());
         }
 
         info!("Starting network...");
@@ -178,20 +178,18 @@ impl Client {
 
         if result != 0 {
             error!("{result}");
-            return Err(FdbErrorCode(result).into())
+            return Err(FdbErrorCode(result).into());
         }
 
         Ok(())
-
     }
 
     fn stop_network() -> Result<(), Error> {
-        let result = unsafe { fdb_c::fdb_stop_network()};
+        let result = unsafe { fdb_c::fdb_stop_network() };
 
         if result != 0 {
             error!("{result}");
             return Err(FdbErrorCode(result).into());
-
         }
 
         Ok(())
@@ -215,26 +213,259 @@ impl Drop for Client {
 //     // call fdb_database_destroy
 // }
 
+trait FDBResult: Sized {
+    fn from_future(future: &mut FDB_future) -> Result<Self, Error>;
+}
 
+struct FDBFuture<T> {
+    future: FDB_future,
+    target: PhantomData<T>,
+}
 
+impl<T> Deref for FDBFuture<T> {
+    type Target = FDB_future;
+    fn deref(&self) -> &Self::Target {
+        &self.future
+    }
+}
 
-struct FDBFuture;
+impl<T> DerefMut for FDBFuture<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.future
+    }
+}
 
-impl Future for FDBFuture {
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let result = unsafe { fdb_c::fdb_future_is_ready(*self) };
+impl<T: FDBResult> Future for FDBFuture<T> {
+    type Output = Result<T, Error>;
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut future = self.future;
+        let ready = unsafe { fdb_c::fdb_future_is_ready(&mut future) } == 1;
+
+        if !ready {
+            return Poll::Pending;
+        }
+
+        let error = unsafe { fdb_c::fdb_future_get_error(&mut future) };
+
+        if error != 0 {
+            error!("{error}");
+            return Poll::Ready(Err(FdbErrorCode(error).into()));
+        }
+
+        Poll::Ready(T::from_future(&mut future))
+    }
+}
+
+enum FDBResultTypes {
+    Int64(Int64),
+    KeyArray,
+    Key,
+    Value,
+    StringArray,
+    KeyValueArray,
+}
+
+struct Int64(i64);
+
+impl FDBResult for Int64 {
+    fn from_future(future: &mut FDB_future) -> Result<Self, Error> {
+        // Dummy init value
+        let mut out: i64 = i64::MIN;
+        let result = unsafe { fdb_c::fdb_future_get_int64(future, &mut out) };
 
         if result != 0 {
             error!("{result}");
             return Err(FdbErrorCode(result).into());
-
         }
+        // Check that dummy value has been overwritten
+        // TODO: Is this stupid to check?
+        assert_ne!(out, i64::MIN);
 
-
+        Ok(Int64(out))
     }
 }
 
+struct Key(Vec<u8>);
 
+impl Deref for Key {
+    type Target = Vec<u8>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Key {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl From<FDBKey> for Key {
+    fn from(value: FDBKey) -> Self {
+        Key(from_raw_fdb_slice(value.key, value.key_length as usize).to_owned())
+    }
+}
+
+fn from_raw_fdb_slice<T, U: Into<usize>>(ptr: *const T, len: U) -> &'static [T] {
+    if ptr.is_null() {
+        return &[];
+    }
+    unsafe { std::slice::from_raw_parts(ptr, len.into()) }
+}
+
+impl FDBResult for Key {
+    fn from_future(future: &mut FDB_future) -> Result<Self, Error> {
+        let mut key = ptr::null();
+        let mut key_length = i32::MIN;
+        let result = unsafe { fdb_c::fdb_future_get_key(future, &mut key, &mut key_length) };
+
+        if result != 0 {
+            error!("{result}");
+            return Err(FdbErrorCode(result).into());
+        }
+        // Check that dummy value has been overwritten
+        assert_ne!(key_length, i32::MIN);
+
+        let key: Key = FDBKey { key, key_length }.into();
+
+        assert_eq!(key.len(), key_length as usize);
+
+        Ok(key)
+    }
+}
+
+struct KeyArray(Vec<Key>);
+
+impl FDBResult for KeyArray {
+    fn from_future(future: &mut FDB_future) -> Result<Self, Error> {
+        let mut keys = ptr::null();
+        let mut key_count = i32::MIN;
+        let result = unsafe { fdb_c::fdb_future_get_key_array(future, &mut keys, &mut key_count) };
+
+        if result != 0 {
+            error!("{result}");
+            return Err(FdbErrorCode(result).into());
+        }
+        // Check that dummy value has been overwritten
+        // TODO: Is this stupid to check?
+        assert_ne!(key_count, i32::MIN);
+
+        let keys: Vec<FDBKey> = from_raw_fdb_slice(keys, key_count as usize).to_owned();
+        let keys: Vec<Key> = keys.into_iter().map(|k| k.into()).collect();
+
+        assert_eq!(keys.len(), key_count as usize);
+
+        Ok(KeyArray(keys))
+    }
+}
+
+struct Value(Option<Vec<u8>>);
+
+impl FDBResult for Value {
+    fn from_future(future: &mut FDB_future) -> Result<Self, Error> {
+        let mut present = i32::MIN;
+        let mut value = ptr::null();
+        let mut value_length = i32::MIN;
+        let result = unsafe {
+            fdb_c::fdb_future_get_value(future, &mut present, &mut value, &mut value_length)
+        };
+
+        if result != 0 {
+            error!("{result}");
+            return Err(FdbErrorCode(result).into());
+        }
+
+        // Value is not present in the database
+        if present == 0 {
+            return Ok(Value(None));
+        }
+
+        // Check that dummy value has been overwritten
+        // TODO: Is this stupid to check?
+        assert_ne!(value_length, i32::MIN);
+        assert_ne!(present, i32::MIN);
+
+        let value = from_raw_fdb_slice(value, value_length as usize).to_owned();
+
+        assert_eq!(value.len(), value_length as usize);
+
+        Ok(Value(Some(value)))
+    }
+}
+
+struct StringArray(Vec<String>);
+
+impl FDBResult for StringArray {
+    fn from_future(future: &mut FDB_future) -> Result<Self, Error> {
+        let mut strings: *mut *const c_char = ptr::null_mut();
+        let mut count = i32::MIN;
+
+        let result =
+            unsafe { fdb_c::fdb_future_get_string_array(future, &mut strings, &mut count) };
+
+        if result != 0 {
+            error!("{result}");
+            return Err(FdbErrorCode(result).into());
+        }
+
+        // Check that dummy value has been overwritten
+        // TODO: Is this stupid to check?
+        assert_ne!(count, i32::MIN);
+
+        let strings = from_raw_fdb_slice(strings, count as usize);
+        let strings = strings
+            .iter()
+            .map(|s| {
+                unsafe { CStr::from_ptr(*s) }
+                    .to_str()
+                    .expect("Could not convert C String to String")
+                    .to_owned()
+            })
+            .collect();
+
+        Ok(StringArray(strings))
+    }
+}
+
+struct KeyValueArray(Vec<(Key, Value)>);
+
+impl FDBResult for KeyValueArray {
+    fn from_future(future: &mut FDB_future) -> Result<Self, Error> {
+        let mut kvs = ptr::null();
+        let mut count = i32::MIN;
+        let mut more_remaining = i32::MIN;
+
+        let result = unsafe {
+            fdb_c::fdb_future_get_keyvalue_array(future, &mut kvs, &mut count, &mut more_remaining)
+        };
+
+        if result != 0 {
+            error!("{result}");
+            return Err(FdbErrorCode(result).into());
+        }
+
+        // Check that dummy value has been overwritten
+        // TODO: Is this stupid to check?
+        assert_ne!(count, i32::MIN);
+        assert_ne!(more_remaining, i32::MIN);
+
+        // TODO: Was mit more_remaining anstellen?
+
+        let kvs = from_raw_fdb_slice(kvs, count as usize);
+        let kvs = kvs
+            .iter()
+            .map(|kv| {
+                let key = Key(from_raw_fdb_slice(kv.key, kv.key_length as usize).to_owned());
+                let value = Value(Some(
+                    from_raw_fdb_slice(kv.value, kv.value_length as usize).to_owned(),
+                ));
+                (key, value)
+            })
+            .collect();
+
+        Ok(KeyValueArray(kvs))
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -242,9 +473,9 @@ mod tests {
 
     #[test]
     fn test_api_version() {
-        #[cfg(feature = "fdb_730" )]
+        #[cfg(feature = "fdb_730")]
         assert_eq!(fdb_c::FDB_API_VERSION, 730);
-        #[cfg(feature = "fdb_710" )]
+        #[cfg(feature = "fdb_710")]
         assert_eq!(fdb_c::FDB_API_VERSION, 710);
     }
 
@@ -288,11 +519,4 @@ mod tests {
         assert!(client.is_ok());
         assert!(client.is_ok());
     }
-    // #[tokio::test]
-    // async fn init_client_again() {
-    //     let client = Client::new().await;
-    //     dbg!(&client);
-    //     assert!(client.is_ok())
-    // }
-
 }
