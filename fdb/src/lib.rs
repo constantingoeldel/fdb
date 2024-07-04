@@ -222,7 +222,7 @@ struct FDBFuture;
 
 impl Future for FDBFuture {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let res = unsafe { fdb_c::fdb_future_is_ready(*self) };
+        let result = unsafe { fdb_c::fdb_future_is_ready(*self) };
 
         if result != 0 {
             error!("{result}");

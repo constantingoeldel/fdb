@@ -1,0 +1,2 @@
+[workspace]
+members = ["fdb", "fdb-test", "fdb-c"]
