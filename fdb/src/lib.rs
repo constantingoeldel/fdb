@@ -121,7 +121,7 @@ impl Client {
         Ok(Self)
     }
     /// Idempotent singleton network setup
-    fn setup_network(options: FDBNetworkOptions) -> Result<(), Error> {
+    fn setup_network(_options: FDBNetworkOptions) -> Result<(), Error> {
         // TODO: Options
         // Set options
         // let options: Vec<FDBNetworkOption> = options.into();
@@ -252,18 +252,25 @@ impl<T: FDBResult> Future for FDBFuture<T> {
             return Poll::Ready(Err(FdbErrorCode(error).into()));
         }
 
-        Poll::Ready(T::from_future(&mut future))
+        let result = Poll::Ready(T::from_future(&mut future));
+
+        // The memory referenced by the result is owned by the FDBFuture object and will be valid until fdb_future_destroy(future) is called.
+        // All the types implementing FDBResult must have ownership of their content at this point.
+        unsafe { fdb_c::fdb_future_destroy(&mut future) }
+
+        result
     }
 }
 
 enum FDBResultTypes {
     Int64(Int64),
-    KeyArray,
-    Key,
-    Value,
-    StringArray,
-    KeyValueArray,
+    KeyArray(KeyArray),
+    Key(Key),
+    Value(Value),
+    StringArray(StringArray),
+    KeyValueArray(KeyValueArray),
 }
+
 
 struct Int64(i64);
 
@@ -466,6 +473,7 @@ impl FDBResult for KeyValueArray {
         Ok(KeyValueArray(kvs))
     }
 }
+
 
 #[cfg(test)]
 mod tests {
