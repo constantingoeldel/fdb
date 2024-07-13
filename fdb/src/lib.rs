@@ -2,19 +2,21 @@ use std::ffi::{CStr, CString};
 use std::fmt::{Debug, Display, Formatter};
 use std::future::Future;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
+use std::ops::{BitAnd, Deref, DerefMut};
+use std::os::fd::IntoRawFd;
 use std::os::raw::c_char;
 use std::pin::Pin;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 
-use futures::poll;
+use async_stream::try_stream;
+use futures::{poll, Stream};
 use log::{error, info, warn};
 use thiserror::Error;
 use tokio::task;
 
-use fdb_c::{FDB_API_VERSION, FDB_database, fdb_error_t, FDB_future, fdb_network_set_option, FDBDatabase, FDBKey, FDBKeyValue, FDBNetworkOption, FDBStreamingMode, FDBTenant, FDBTransaction};
+use fdb_c::{FDB_API_VERSION, FDB_database, fdb_error_t, FDB_future, fdb_network_set_option, FDBDatabase, FDBKey, FDBKeyValue, FDBMutationType_FDB_MUTATION_TYPE_ADD, FDBMutationType_FDB_MUTATION_TYPE_AND, FDBMutationType_FDB_MUTATION_TYPE_BYTE_MAX, FDBMutationType_FDB_MUTATION_TYPE_BYTE_MIN, FDBMutationType_FDB_MUTATION_TYPE_COMPARE_AND_CLEAR, FDBMutationType_FDB_MUTATION_TYPE_MAX, FDBMutationType_FDB_MUTATION_TYPE_MIN, FDBMutationType_FDB_MUTATION_TYPE_OR, FDBMutationType_FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_KEY, FDBMutationType_FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_VALUE, FDBMutationType_FDB_MUTATION_TYPE_XOR, FDBNetworkOption, FDBStreamingMode, FDBTenant, FDBTransaction};
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -28,6 +30,8 @@ pub enum Error {
     NetworkSingletonViolated,
     #[error("Action not possible before the network is configured")]
     ActionInvalidBeforeNetworkConfig,
+    #[error("Key not found")]
+    KeyNotFound
 }
 
 #[derive(Eq, PartialEq)]
@@ -259,6 +263,14 @@ impl<T: FDBResult> Future for FDBFuture<T> {
     }
 }
 
+struct Empty(());
+
+impl FDBResult for Empty {
+    fn from_future(future: &mut FDB_future) -> Result<Self, Error> {
+        return Ok(Empty(()))
+    }
+}
+
 // enum FDBResultTypes {
 //     Int64(Int64),
 //     KeyArray(KeyArray),
@@ -363,7 +375,14 @@ impl FDBResult for KeyArray {
     }
 }
 
-struct Value(Option<Vec<u8>>);
+struct Value(Vec<u8>);
+
+impl Deref for Value {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl FDBResult for Value {
     fn from_future(future: &mut FDB_future) -> Result<Self, Error> {
@@ -381,7 +400,7 @@ impl FDBResult for Value {
 
         // Value is not present in the database
         if present == 0 {
-            return Ok(Value(None));
+            return Err(Error::KeyNotFound);
         }
 
         // Check that dummy value has been overwritten
@@ -393,11 +412,12 @@ impl FDBResult for Value {
 
         assert_eq!(value.len(), value_length as usize);
 
-        Ok(Value(Some(value)))
+        Ok(Value(value))
     }
 }
 
 struct StringArray(Vec<String>);
+
 
 impl FDBResult for StringArray {
     fn from_future(future: &mut FDB_future) -> Result<Self, Error> {
@@ -460,9 +480,9 @@ impl FDBResult for KeyValueArray {
             .iter()
             .map(|kv| {
                 let key = Key(from_raw_fdb_slice(kv.key, kv.key_length as usize).to_owned());
-                let value = Value(Some(
+                let value = Value(
                     from_raw_fdb_slice(kv.value, kv.value_length as usize).to_owned(),
-                ));
+                );
                 (key, value)
             })
             .collect();
@@ -603,31 +623,32 @@ impl Transaction {
     }
 
     /// Reads a value from the database
-    async  fn get(&mut self, key: Key, snapshot: bool) -> Result<Value, Error> {
-
+    async fn get(&mut self, key: Key, snapshot: bool) -> Result<Value, Error> {
         let future = unsafe { fdb_c::fdb_transaction_get(&mut self.0, key.as_ptr(), key.len() as i32, snapshot as i32) };
         // TODO: make this conversion a method of future
-        let future = FDBFuture { future: unsafe { *future} , target: PhantomData };
+        let future = FDBFuture { future: unsafe { *future }, target: PhantomData };
 
         future.await
     }
 
     /// Returns an estimated byte size of the key range.
-    /// 
+    ///
     /// The estimated size is calculated based on the sampling done by FDB server.
     /// The sampling algorithm works roughly in this way: the larger the key-value pair is,
     /// the more likely it would be sampled and the more accurate its sampled size would be.
     /// And due to that reason it is recommended to use this API to query against large ranges for
     /// accuracy considerations.
     /// For a rough reference, if the returned size is larger than 3MB, one can consider the size to be accurate.
-    async fn get_estimated_range_size(&mut self, start: Key, end: Key) -> Result<Int64, Error> {
-
+    ///
+    /// TODO: Does this include the size of the keys as well?
+    async fn get_estimated_range_size(&mut self, start: Key, end: Key) -> Result<i64, Error> {
         let future = unsafe { fdb_c::fdb_transaction_get_estimated_range_size_bytes(&mut self.0, start.as_ptr(), start.len() as i32, end.as_ptr(), end.len() as i32) };
 
         let future = FDBFuture { future: unsafe { *future }, target: PhantomData };
 
-        future.await
-        
+        let size: Int64 = future.await?;
+
+        Ok(size.0)
     }
     /// Returns a list of keys that can split the given range into (roughly) equally sized chunks based on chunk_size.
     async fn get_range_split_points(&mut self, start: Key, end: Key, chunk_size: i64) -> Result<KeyArray, Error> {
@@ -637,30 +658,29 @@ impl Transaction {
 
         future.await
     }
-    
+
     /// Resolves a key selector against the keys in the database snapshot represented by transaction.
-    async fn get_key(&mut self, key: Key, offset: i32, inclusive: bool, snapshot: bool )  -> Result<Key, Error> {
-        
-        let future = unsafe { fdb_c::fdb_transaction_get_key(&mut self.0, key.as_ptr(), key.len() as i32, inclusive as i32, offset,  snapshot as i32) };
-        
+    async fn get_key(&mut self, key: Key, offset: i32, inclusive: bool, snapshot: bool) -> Result<Key, Error> {
+        let future = unsafe { fdb_c::fdb_transaction_get_key(&mut self.0, key.as_ptr(), key.len() as i32, inclusive as i32, offset, snapshot as i32) };
+
         let future = FDBFuture { future: unsafe { *future }, target: PhantomData };
-        
+
         future.await
     }
-    
-    async fn get_first_key_greater_or_equal_than(&mut self, key: Key, offset: i32, snapshot: bool) ->Result<Key, Error> {
+
+    async fn get_first_key_greater_or_equal_than(&mut self, key: Key, offset: i32, snapshot: bool) -> Result<Key, Error> {
         self.get_key(key, 1 + offset, true, snapshot).await
     }
 
-    async fn get_first_key_greater_than(&mut self, key: Key, offset: i32, snapshot: bool) ->Result<Key, Error> {
+    async fn get_first_key_greater_than(&mut self, key: Key, offset: i32, snapshot: bool) -> Result<Key, Error> {
         self.get_key(key, 1 + offset, false, snapshot).await
     }
 
-    async fn get_last_key_less_or_equal_than(&mut self, key: Key, offset: i32, snapshot: bool) ->Result<Key, Error> {
+    async fn get_last_key_less_or_equal_than(&mut self, key: Key, offset: i32, snapshot: bool) -> Result<Key, Error> {
         self.get_key(key, -1 + offset, true, snapshot).await
     }
 
-    async fn get_last_key_less_than(&mut self, key: Key, offset: i32, snapshot: bool) ->Result<Key, Error> {
+    async fn get_last_key_less_than(&mut self, key: Key, offset: i32, snapshot: bool) -> Result<Key, Error> {
         self.get_key(key, -1 + offset, false, snapshot).await
     }
 
@@ -673,15 +693,225 @@ impl Transaction {
 
         future.await
     }
-    
-    async fn get_range(&mut self, start: Key, begin_inclusive: bool, begin_offset: i32, end: Key, end_inclusive: bool, end_offset: i32, limit: Option<i32>, target_bytes: Option<i32>, mode: FDBStreamingMode, iteration: i32, snapshot: bool, reverse: bool ) -> Result<KeyValueArray, Error> {
-        
+
+    /// Return Keys and Values within a given range as a stream of `(Key, Value)` tuples.
+    ///
+    /// TODO: Check Lifetime of returned tuples corresponds to lifetime of transaction
+    async fn get_range(&mut self, start: KeySelector, end: KeySelector, limit: Option<i32>, target_bytes: Option<i32>, snapshot: bool, reverse: bool) -> impl Stream<Item=Result<(Key, Value), Error>> + '_ {
+        try_stream! {
+            let mut iteration = 0;
+            let mode = fdb_c::FDBStreamingMode_FDB_STREAMING_MODE_ITERATOR;
+
+             loop {
+                let future = unsafe { fdb_c::fdb_transaction_get_range(&mut self.0, start.key.as_ptr(), start.key.len() as i32, start.inclusive as i32, start.offset, end.key.as_ptr(), end.key.len() as i32, end.inclusive as i32, end.offset, limit.unwrap_or(0), target_bytes.unwrap_or(0), mode, iteration, snapshot as i32, reverse as i32) };
+
+                let future = FDBFuture { future: unsafe { *future }, target: PhantomData };
+
+                let mut result: KeyValueArray = future.await?;
+
+                if result.0.is_empty() {
+                    // All range items have been returned
+                    break;
+                }
+
+                iteration += 1;
+                    for r in result.0 {
+                        yield r;
+                    }
+            }
     }
-    
-    
-    
+    }
+
+    /// Infallible because setting happens client-side until commiting the transaction
+    async fn set(&mut self, key: Key, value: Value) {
+        unsafe { fdb_c::fdb_transaction_set(&mut self.0, key.as_ptr(), key.len() as i32, value.as_ptr(), value.len() as i32) };
+    }
+
+    /// Infallible because clearing stays client-side until commiting the transaction
+    async fn clear(&mut self, key: Key) {
+        unsafe { fdb_c::fdb_transaction_clear(&mut self.0, key.as_ptr(), key.len() as i32) }
+    }
+
+    async fn clear_range(&mut self, start: Key, end: Key) {
+        unsafe { fdb_c::fdb_transaction_clear_range(&mut self.0, start.as_ptr(), start.len() as i32, end.as_ptr(), end.len() as i32) }
+    }
+
+    async fn atomic_add(&mut self, key: Key, other: i32) {
+        let operation_type = FDBMutationType_FDB_MUTATION_TYPE_ADD;
+        let addend = other.to_le_bytes();
+
+        unsafe { fdb_c::fdb_transaction_atomic_op(&mut self.0, key.as_ptr(), key.len() as i32, addend.as_ptr(), 32 / 8, operation_type) }
+    }
+
+    /// Performs a bitwise “and” operation
+    ///
+    /// TODO: better datatype for other (Maybe something like impl BitAnd?)
+    async fn atomic_and(&mut self, key: Key, other: &Value) {
+        let operation_type = FDBMutationType_FDB_MUTATION_TYPE_AND;
+
+        unsafe { fdb_c::fdb_transaction_atomic_op(&mut self.0, key.as_ptr(), key.len() as i32, other.as_ptr(), other.len() as i32, operation_type) }
+    }
+
+    async fn atomic_or(&mut self, key: Key, other: &Value) {
+        let operation_type = FDBMutationType_FDB_MUTATION_TYPE_OR;
+
+        unsafe { fdb_c::fdb_transaction_atomic_op(&mut self.0, key.as_ptr(), key.len() as i32, other.as_ptr(), other.len() as i32, operation_type) }
+    }
+
+    async fn atomic_xor(&mut self, key: Key, other: &Value) {
+        let operation_type = FDBMutationType_FDB_MUTATION_TYPE_XOR;
+
+        unsafe { fdb_c::fdb_transaction_atomic_op(&mut self.0, key.as_ptr(), key.len() as i32, other.as_ptr(), other.len() as i32, operation_type) }
+    }
+
+    /// Performs an atomic compare and clear operation. If the existing value in the database is equal to the given value, then given key is cleared.
+    async fn atomic_compare_and_clear(&mut self, key: Key, other: &Value) {
+        let operation_type = FDBMutationType_FDB_MUTATION_TYPE_COMPARE_AND_CLEAR;
+
+        unsafe { fdb_c::fdb_transaction_atomic_op(&mut self.0, key.as_ptr(), key.len() as i32, other.as_ptr(), other.len() as i32, operation_type) }
+    }
+
+    /// Sets the value in the database to the larger of the existing value and other. If the key is not present, other is stored
+    async fn atomic_max(&mut self, key: Key, other: u32) {
+        let operation_type = FDBMutationType_FDB_MUTATION_TYPE_MAX;
+
+        let other = other.to_le_bytes();
+
+        unsafe { fdb_c::fdb_transaction_atomic_op(&mut self.0, key.as_ptr(), key.len() as i32, other.as_ptr(), 32 / 8, operation_type) }
+    }
+
+    /// Performs lexicographic comparison of byte strings. If the existing value in the database is not present, then other is stored.
+    /// Otherwise, the larger of the two values is then stored in the database.
+    async fn atomic_byte_max(&mut self, key: Key, other: &Value) {
+        let operation_type = FDBMutationType_FDB_MUTATION_TYPE_BYTE_MAX;
+
+        unsafe { fdb_c::fdb_transaction_atomic_op(&mut self.0, key.as_ptr(), key.len() as i32, other.as_ptr(), other.len() as i32, operation_type) }
+    }
+
+    /// Sets the value in the database to the smaller of the existing value and other. If the key is not present, other is stored
+    async fn atomic_min(&mut self, key: Key, other: u32) {
+        let operation_type = FDBMutationType_FDB_MUTATION_TYPE_MIN;
+
+        let other = other.to_le_bytes();
+
+        unsafe { fdb_c::fdb_transaction_atomic_op(&mut self.0, key.as_ptr(), key.len() as i32, other.as_ptr(), 32 / 8, operation_type) }
+    }
+
+    /// Performs lexicographic comparison of byte strings. If the existing value in the database is not present, then other is stored.
+    /// Otherwise, the smaller of the two values is then stored in the database.
+    async fn atomic_byte_min(&mut self, key: Key, other: &Value) {
+        let operation_type = FDBMutationType_FDB_MUTATION_TYPE_BYTE_MIN;
+
+        unsafe { fdb_c::fdb_transaction_atomic_op(&mut self.0, key.as_ptr(), key.len() as i32, other.as_ptr(), other.len() as i32, operation_type) }
+    }
+
+    /// Atomic version of set()
+    ///
+    /// Collisions with other transactions are circumvented by replacing part of the key with the versionstamp of this transaction, ensuring uniqueness.
+    ///
+    /// Replacement mechanism:
+    ///
+    /// The final 4 bytes of the key will be interpreted as a 32-bit little-endian integer denoting
+    /// an index into the key at which to perform the transformation, and then trimmed off the key.
+    /// The 10 bytes in the key beginning at the index will be overwritten with the versionstamp.
+    /// If the index plus 10 bytes points past the end of the key, the result will be an error.
+    ///
+    /// TODO: Use special versionstamped Key type for this
+    ///
+    /// A transaction is not permitted to read any transformed key or value previously set within
+    /// that transaction, and an attempt to do so will result in an accessed_unreadable error.
+    /// The range of keys marked unreadable when setting a versionstamped key begins at the
+    /// transactions’s read version if it is known, otherwise a versionstamp of all 0x00 bytes
+    /// is conservatively assumed. The upper bound of the unreadable range is a versionstamp of all 0xFF bytes
+    async fn atomic_set_versionstamped_key(&mut self, key: Key, value: Value) {
+        let operation_type = FDBMutationType_FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_KEY;
+
+        unsafe { fdb_c::fdb_transaction_atomic_op(&mut self.0, key.as_ptr(), key.len() as i32, value.as_ptr(), value.len() as i32, operation_type) }
+    }
+
+    /// Another Atomic version of set()
+    ///
+    /// Collisions with other transactions are ignored and part of the value of this transaction is overwritten with the versionstamp, ensuring global ordering.
+    ///
+    /// Replacement mechanism:
+    ///
+    /// The final 4 bytes of the value will be interpreted as a 32-bit little-endian integer denoting
+    /// an index into the value at which to perform the transformation, and then trimmed off the key.
+    /// The 10 bytes in the value beginning at the index will be overwritten with the versionstamp.
+    /// If the index plus 10 bytes points past the end of the value, the result will be an error.
+    ///
+    /// TODO: Use special versionstamped Value type for this
+    ///
+    /// A transaction is not permitted to read any transformed key or value previously set within
+    /// that transaction, and an attempt to do so will result in an accessed_unreadable error.
+    /// The range of keys marked unreadable when setting a versionstamped key begins at the
+    /// transactions’s read version if it is known, otherwise a versionstamp of all 0x00 bytes is
+    /// conservatively assumed. The upper bound of the unreadable range is a versionstamp of all 0xFF bytes
+    async fn atomic_set_versionstamped_value(&mut self, key: Key, value: Value) {
+        let operation_type = FDBMutationType_FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_VALUE;
+
+        unsafe { fdb_c::fdb_transaction_atomic_op(&mut self.0, key.as_ptr(), key.len() as i32, value.as_ptr(), value.len() as i32, operation_type) }
+    }
+
+    /// Consume a readonly transaction, thereby destroying it (readonly transactions don't need to be committed)
+    async fn commit_readonly(self) {
+        drop(self)
+    }
+
+    async fn commit(mut self) -> Result<CommitVersion, Error> {
+        let future = unsafe { fdb_c::fdb_transaction_commit(&mut self.0) };
+
+        let commit_fut = FDBFuture { future: unsafe { *future }, target: PhantomData };
+
+        let _commited: Empty = commit_fut.await?;
+
+        let mut version = i64::MIN;
+
+        let result = unsafe { fdb_c::fdb_transaction_get_committed_version(&mut self.0, &mut version) };
+
+        if result != 0 {
+            error!("{result}");
+            return Err(FdbErrorCode(result).into());
+        };
+
+        assert_ne!(version, i64::MIN);
+
+        Ok(version)
+    }
 }
 
+type CommitVersion = i64;
+
+
+struct KeySelector {
+    // Key the selector starts from
+    key: Key,
+    inclusive: bool,
+    offset: i32,
+}
+
+impl KeySelector {
+    fn set_inclusive(mut self, to: bool) -> Self {
+        self.inclusive = to;
+        self
+    }
+
+    fn set_offset(mut self, to: i32) -> Self {
+        self.offset = to;
+        self
+    }
+}
+
+/// Default Conversion
+impl From<Key> for KeySelector {
+    fn from(value: Key) -> Self {
+        KeySelector {
+            key: value,
+            inclusive: true,
+            offset: 0,
+        }
+    }
+}
 
 
 
