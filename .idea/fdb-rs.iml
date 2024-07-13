@@ -6,6 +6,8 @@
       <sourceFolder url="file://$MODULE_DIR$/fdb-test/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fdb/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/fdb-c/target" />
+      <excludeFolder url="file://$MODULE_DIR$/fdb/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

@@ -1,4 +1,4 @@
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::fmt::{Debug, Display, Formatter};
 use std::future::Future;
 use std::marker::PhantomData;
@@ -14,10 +14,7 @@ use log::{error, info, warn};
 use thiserror::Error;
 use tokio::task;
 
-use fdb_c::{
-    FDB_API_VERSION, fdb_error_t, FDB_future, fdb_network_set_option, FDBKey, FDBKeyValue,
-    FDBNetworkOption,
-};
+use fdb_c::{FDB_API_VERSION, FDB_database, fdb_error_t, FDB_future, fdb_network_set_option, FDBDatabase, FDBKey, FDBKeyValue, FDBNetworkOption, FDBStreamingMode, FDBTenant, FDBTransaction};
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -262,14 +259,14 @@ impl<T: FDBResult> Future for FDBFuture<T> {
     }
 }
 
-enum FDBResultTypes {
-    Int64(Int64),
-    KeyArray(KeyArray),
-    Key(Key),
-    Value(Value),
-    StringArray(StringArray),
-    KeyValueArray(KeyValueArray),
-}
+// enum FDBResultTypes {
+//     Int64(Int64),
+//     KeyArray(KeyArray),
+//     Key(Key),
+//     Value(Value),
+//     StringArray(StringArray),
+//     KeyValueArray(KeyValueArray),
+// }
 
 
 struct Int64(i64);
@@ -473,6 +470,219 @@ impl FDBResult for KeyValueArray {
         Ok(KeyValueArray(kvs))
     }
 }
+
+struct Database(FDBDatabase);
+struct Tenant(FDBTenant);
+
+impl Database {
+    /// Creates a new database connected the specified cluster. The caller assumes ownership of the
+    /// FDBDatabase object and must destroy it with fdb_database_destroy() (Implemented to automatically happen on Drop).
+    ///
+    /// --- TODO: Not implemented yet, always uses the default cluster file ---
+    /// A single client can use this function multiple times to connect to different clusters
+    /// simultaneously, with each invocation requiring its own cluster file.
+    /// To connect to multiple clusters running at different, incompatible versions, the multi-version client API must be used.
+    fn new() -> Result<Self, Error> {
+        let mut db = ptr::null_mut();
+        let cluster_file_path = c"";
+
+        let result = unsafe { fdb_c::fdb_create_database(cluster_file_path.as_ptr(), db) };
+
+        if result != 0 {
+            error!("{result}");
+            return Err(FdbErrorCode(result).into());
+        };
+
+        Ok(Database(unsafe {**db}))
+    }
+
+    fn set_option() -> Result<(), Error> {
+        todo!()
+    }
+
+    fn tenant(&mut self, name: &str) -> Result<Tenant, Error> {
+        let tenant_name = name.as_bytes();
+        let mut tenant = ptr::null_mut();
+
+        let result = unsafe { fdb_c::fdb_database_open_tenant(&mut self.0, tenant_name.as_ptr(), tenant_name.len() as i32, &mut tenant) };
+
+        if result != 0 {
+            error!("{result}");
+            return Err(FdbErrorCode(result).into());
+        }
+
+        Ok(Tenant(unsafe {*tenant}))
+    }
+
+    fn reboot_worker() {
+        todo!()
+    }
+
+    fn force_recovery_with_data_loss() {
+        todo!()
+    }
+
+    fn create_snapshot() {
+        todo!()
+    }
+
+    /// Returns a value where 0 indicates that the client is idle and 1 (or larger) indicates
+    /// that the client is saturated. By default, this value is updated every second.
+    fn get_main_thread_busyness(&mut self) -> f64 {
+        unsafe { fdb_c::fdb_database_get_main_thread_busyness(&mut self.0) }
+    }
+
+}
+
+impl Drop for Database {
+    /// Destroys an FDBDatabase object. It must be called exactly once for each successful call to
+    /// fdb_create_database(). This function only destroys a handle to the database – your database will be fine!
+    fn drop(&mut self) {
+        unsafe { fdb_c::fdb_database_destroy(&mut self.0) };
+    }
+}
+
+impl Drop for Tenant {
+    /// Destroys an FDBTenant object. It must be called exactly once for each successful call to
+    /// fdb_database_create_tenant(). This function only destroys a handle to the tenant – the
+    /// tenant and its data will be fine!
+    fn drop(&mut self) {
+        unsafe { fdb_c::fdb_tenant_destroy(&mut self.0) };
+
+    }
+}
+
+struct Transaction(FDBTransaction);
+
+impl Drop for Transaction {
+    fn drop(&mut self) {
+        unsafe { fdb_c::fdb_transaction_destroy(&mut self.0) };
+    }
+}
+
+trait CreateTransaction {
+    fn create_transaction(&mut self) -> Result<Transaction, Error>;
+}
+
+impl CreateTransaction for Database {
+    fn create_transaction(&mut self) -> Result<Transaction, Error> {
+        let mut trx = ptr::null_mut();
+        let result = unsafe { fdb_c::fdb_database_create_transaction(&mut self.0, &mut trx) };
+
+        if result != 0 {
+            error!("{result}");
+            return Err(FdbErrorCode(result).into());
+        }
+
+        Ok(Transaction(unsafe {*trx}))
+    }
+}
+
+impl CreateTransaction for Tenant {
+    fn create_transaction(&mut self) -> Result<Transaction, Error> {
+        let mut trx = ptr::null_mut();
+        let result = unsafe { fdb_c::fdb_tenant_create_transaction(&mut self.0, &mut trx) };
+
+        if result != 0 {
+            error!("{result}");
+            return Err(FdbErrorCode(result).into());
+        }
+
+        Ok(Transaction(unsafe {*trx}))
+
+    }
+}
+
+impl Transaction {
+    fn set_option() -> Result<(), Error> {
+        todo!()
+    }
+
+    fn set_read_version() -> Result<(), Error> {
+        todo!()
+    }
+
+    /// Reads a value from the database
+    async  fn get(&mut self, key: Key, snapshot: bool) -> Result<Value, Error> {
+
+        let future = unsafe { fdb_c::fdb_transaction_get(&mut self.0, key.as_ptr(), key.len() as i32, snapshot as i32) };
+        // TODO: make this conversion a method of future
+        let future = FDBFuture { future: unsafe { *future} , target: PhantomData };
+
+        future.await
+    }
+
+    /// Returns an estimated byte size of the key range.
+    /// 
+    /// The estimated size is calculated based on the sampling done by FDB server.
+    /// The sampling algorithm works roughly in this way: the larger the key-value pair is,
+    /// the more likely it would be sampled and the more accurate its sampled size would be.
+    /// And due to that reason it is recommended to use this API to query against large ranges for
+    /// accuracy considerations.
+    /// For a rough reference, if the returned size is larger than 3MB, one can consider the size to be accurate.
+    async fn get_estimated_range_size(&mut self, start: Key, end: Key) -> Result<Int64, Error> {
+
+        let future = unsafe { fdb_c::fdb_transaction_get_estimated_range_size_bytes(&mut self.0, start.as_ptr(), start.len() as i32, end.as_ptr(), end.len() as i32) };
+
+        let future = FDBFuture { future: unsafe { *future }, target: PhantomData };
+
+        future.await
+        
+    }
+    /// Returns a list of keys that can split the given range into (roughly) equally sized chunks based on chunk_size.
+    async fn get_range_split_points(&mut self, start: Key, end: Key, chunk_size: i64) -> Result<KeyArray, Error> {
+        let future = unsafe { fdb_c::fdb_transaction_get_range_split_points(&mut self.0, start.as_ptr(), start.len() as i32, end.as_ptr(), end.len() as i32, chunk_size) };
+
+        let future = FDBFuture { future: unsafe { *future }, target: PhantomData };
+
+        future.await
+    }
+    
+    /// Resolves a key selector against the keys in the database snapshot represented by transaction.
+    async fn get_key(&mut self, key: Key, offset: i32, inclusive: bool, snapshot: bool )  -> Result<Key, Error> {
+        
+        let future = unsafe { fdb_c::fdb_transaction_get_key(&mut self.0, key.as_ptr(), key.len() as i32, inclusive as i32, offset,  snapshot as i32) };
+        
+        let future = FDBFuture { future: unsafe { *future }, target: PhantomData };
+        
+        future.await
+    }
+    
+    async fn get_first_key_greater_or_equal_than(&mut self, key: Key, offset: i32, snapshot: bool) ->Result<Key, Error> {
+        self.get_key(key, 1 + offset, true, snapshot).await
+    }
+
+    async fn get_first_key_greater_than(&mut self, key: Key, offset: i32, snapshot: bool) ->Result<Key, Error> {
+        self.get_key(key, 1 + offset, false, snapshot).await
+    }
+
+    async fn get_last_key_less_or_equal_than(&mut self, key: Key, offset: i32, snapshot: bool) ->Result<Key, Error> {
+        self.get_key(key, -1 + offset, true, snapshot).await
+    }
+
+    async fn get_last_key_less_than(&mut self, key: Key, offset: i32, snapshot: bool) ->Result<Key, Error> {
+        self.get_key(key, -1 + offset, false, snapshot).await
+    }
+
+    /// Returns a list of public network addresses as strings, one for each of the storage servers
+    /// responsible for storing the key and its associated value.
+    async fn get_key_addresses(&mut self, key: Key) -> Result<StringArray, Error> {
+        let future = unsafe { fdb_c::fdb_transaction_get_addresses_for_key(&mut self.0, key.as_ptr(), key.len() as i32) };
+
+        let future = FDBFuture { future: unsafe { *future }, target: PhantomData };
+
+        future.await
+    }
+    
+    async fn get_range(&mut self, start: Key, begin_inclusive: bool, begin_offset: i32, end: Key, end_inclusive: bool, end_offset: i32, limit: Option<i32>, target_bytes: Option<i32>, mode: FDBStreamingMode, iteration: i32, snapshot: bool, reverse: bool ) -> Result<KeyValueArray, Error> {
+        
+    }
+    
+    
+    
+}
+
+
 
 
 #[cfg(test)]
