@@ -1,0 +1,10 @@
+[package]
+name = "redis"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fdb = { path = "../fdb", features = ["710"] }
+tokio = { version = "1", features = ["full"] }
+bytes = "1"
+redis-protocol = { version = "5.0.1", features = ["bytes", "codec", "decode-logs", "convert", "index-map"] }
