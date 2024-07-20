@@ -25,7 +25,7 @@ impl From<*mut FDBTransaction> for Transaction {
 }
 
 pub trait CreateTransaction {
-    fn create_transaction(&mut self) -> Result<Transaction, Error>;
+    fn create_transaction(&self) -> Result<Transaction, Error>;
 }
 
 
@@ -66,7 +66,7 @@ impl Transaction {
     }
 
     /// Reads a value from the database
-    async fn _get(&mut self, key: Key, snapshot: bool) -> Result<Value, Error> {
+    async fn _get(&self, key: Key, snapshot: bool) -> Result<Value, Error> {
         let future: FDBFuture<Value> = unsafe {
             fdb_c::fdb_transaction_get(self.0, key.as_ptr(), key.len() as i32, snapshot as i32)
         }.into();
@@ -74,10 +74,10 @@ impl Transaction {
         handle.await.unwrap()
     }
 
-    pub async fn get<K: Into<Key>>(&mut self, key: K) -> Result<Value, Error> {
+    pub async fn get<K: Into<Key>>(&self, key: K) -> Result<Value, Error> {
         self._get(key.into(), false).await
     }
-    pub async fn snapshot_get<K: Into<Key>>(&mut self, key: K) -> Result<Value, Error> {
+    pub async fn snapshot_get<K: Into<Key>>(&self, key: K) -> Result<Value, Error> {
         self._get(key.into(), true).await
     }
 
@@ -283,7 +283,7 @@ impl Transaction {
 
     /// Returns a list of public network addresses as strings, one for each of the storage servers
     /// responsible for storing the key and its associated value.
-    pub async fn get_key_addresses<K: Into<Key>>(&mut self, key: K) -> Result<StringArray, Error> {
+    pub async fn get_key_addresses<K: Into<Key>>(&self, key: K) -> Result<StringArray, Error> {
         let key = key.into();
         let future: FDBFuture<StringArray> = unsafe {
             fdb_c::fdb_transaction_get_addresses_for_key(
@@ -331,7 +331,7 @@ impl Transaction {
     }
 
     /// Infallible because setting happens client-side until commiting the transaction
-    pub async fn set<K: Into<Key>, V: Into<Value>>(&mut self, key: K, value: V) {
+    pub async fn set<K: Into<Key>, V: Into<Value>>(&self, key: K, value: V) {
         let key = key.into();
         let value = value.into();
         unsafe {
@@ -346,12 +346,12 @@ impl Transaction {
     }
 
     /// Infallible because clearing stays client-side until commiting the transaction
-    pub async fn clear<K: Into<Key>>(&mut self, key: K) {
+    pub async fn clear<K: Into<Key>>(&self, key: K) {
         let key = key.into();
         unsafe { fdb_c::fdb_transaction_clear(self.0, key.as_ptr(), key.len() as i32) }
     }
 
-    pub async fn clear_range<K: Into<Key>>(&mut self, start: K, end: K) {
+    pub async fn clear_range<K: Into<Key>>(&self, start: K, end: K) {
         let start = start.into();
         let end = end.into();
         unsafe {
@@ -365,7 +365,7 @@ impl Transaction {
         }
     }
 
-    pub async fn atomic_add<K: Into<Key>>(&mut self, key: K, other: i32) {
+    pub async fn atomic_add<K: Into<Key>>(&self, key: K, other: i32) {
         let key = key.into();
         let operation_type = FDBMutationType_FDB_MUTATION_TYPE_ADD;
         let addend = other.to_le_bytes();
@@ -385,7 +385,7 @@ impl Transaction {
     /// Performs a bitwise “and” operation
     ///
     /// TODO: better datatype for other (Maybe something like impl BitAnd?)
-    pub async fn atomic_and<K: Into<Key>>(&mut self, key: K, other: &Value) {
+    pub async fn atomic_and<K: Into<Key>>(&self, key: K, other: &Value) {
         let key = key.into();
         let operation_type = FDBMutationType_FDB_MUTATION_TYPE_AND;
 
@@ -401,7 +401,7 @@ impl Transaction {
         }
     }
 
-    pub async fn atomic_or<K: Into<Key>>(&mut self, key: K, other: &Value) {
+    pub async fn atomic_or<K: Into<Key>>(&self, key: K, other: &Value) {
         let key = key.into();
         let operation_type = FDBMutationType_FDB_MUTATION_TYPE_OR;
 
@@ -417,7 +417,7 @@ impl Transaction {
         }
     }
 
-    pub async fn atomic_xor<K: Into<Key>>(&mut self, key: K, other: &Value) {
+    pub async fn atomic_xor<K: Into<Key>>(&self, key: K, other: &Value) {
         let key = key.into();
         let operation_type = FDBMutationType_FDB_MUTATION_TYPE_XOR;
 
@@ -434,7 +434,7 @@ impl Transaction {
     }
 
     /// Performs an atomic compare and clear operation. If the existing value in the database is equal to the given value, then given key is cleared.
-    pub async fn atomic_compare_and_clear<K: Into<Key>>(&mut self, key: K, other: &Value) {
+    pub async fn atomic_compare_and_clear<K: Into<Key>>(&self, key: K, other: &Value) {
         let key = key.into();
         let operation_type = FDBMutationType_FDB_MUTATION_TYPE_COMPARE_AND_CLEAR;
 
@@ -451,7 +451,7 @@ impl Transaction {
     }
 
     /// Sets the value in the database to the larger of the existing value and other. If the key is not present, other is stored
-    pub async fn atomic_max<K: Into<Key>>(&mut self, key: K, other: u32) {
+    pub async fn atomic_max<K: Into<Key>>(&self, key: K, other: u32) {
         let key = key.into();
         let operation_type = FDBMutationType_FDB_MUTATION_TYPE_MAX;
 
@@ -471,7 +471,7 @@ impl Transaction {
 
     /// Performs lexicographic comparison of byte strings. If the existing value in the database is not present, then other is stored.
     /// Otherwise, the larger of the two values is then stored in the database.
-    pub async fn atomic_byte_max<K: Into<Key>>(&mut self, key: K, other: &Value) {
+    pub async fn atomic_byte_max<K: Into<Key>>(&self, key: K, other: &Value) {
         let key = key.into();
         let operation_type = FDBMutationType_FDB_MUTATION_TYPE_BYTE_MAX;
 
@@ -488,7 +488,7 @@ impl Transaction {
     }
 
     /// Sets the value in the database to the smaller of the existing value and other. If the key is not present, other is stored
-    pub async fn atomic_min<K: Into<Key>>(&mut self, key: K, other: u32) {
+    pub async fn atomic_min<K: Into<Key>>(&self, key: K, other: u32) {
         let key = key.into();
         let operation_type = FDBMutationType_FDB_MUTATION_TYPE_MIN;
 
@@ -508,7 +508,7 @@ impl Transaction {
 
     /// Performs lexicographic comparison of byte strings. If the existing value in the database is not present, then other is stored.
     /// Otherwise, the smaller of the two values is then stored in the database.
-    pub async fn atomic_byte_min<K: Into<Key>>(&mut self, key: K, other: &Value) {
+    pub async fn atomic_byte_min<K: Into<Key>>(&self, key: K, other: &Value) {
         let key = key.into();
         let operation_type = FDBMutationType_FDB_MUTATION_TYPE_BYTE_MIN;
 
@@ -542,7 +542,7 @@ impl Transaction {
     /// The range of keys marked unreadable when setting a versionstamped key begins at the
     /// transactions’s read version if it is known, otherwise a versionstamp of all 0x00 bytes
     /// is conservatively assumed. The upper bound of the unreadable range is a versionstamp of all 0xFF bytes
-    pub async fn atomic_set_versionstamped_key<K: Into<Key>>(&mut self, key: K, value: Value) {
+    pub async fn atomic_set_versionstamped_key<K: Into<Key>>(&self, key: K, value: Value) {
         let key = key.into();
         let operation_type = FDBMutationType_FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_KEY;
 
@@ -576,7 +576,7 @@ impl Transaction {
     /// The range of keys marked unreadable when setting a versionstamped key begins at the
     /// transactions’s read version if it is known, otherwise a versionstamp of all 0x00 bytes is
     /// conservatively assumed. The upper bound of the unreadable range is a versionstamp of all 0xFF bytes
-    pub async fn atomic_set_versionstamped_value<K: Into<Key>>(&mut self, key: K, value: Value) {
+    pub async fn atomic_set_versionstamped_value<K: Into<Key>>(&self, key: K, value: Value) {
         let key = key.into();
         let operation_type = FDBMutationType_FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_VALUE;
 
@@ -598,14 +598,14 @@ impl Transaction {
     /// This can be called multiple times before the transaction is committed.
     ///
     /// The maximum allowed transaction size is 10MB.
-    pub async fn get_approximate_size(&mut self) -> Result<Int64, Error> {
+    pub async fn get_approximate_size(&self) -> Result<Int64, Error> {
         let future: FDBFuture<Int64> = unsafe { fdb_c::fdb_transaction_get_approximate_size(self.0) }.into();
 
         future.await
     }
 
     /// TODO: perhaps make this a method of Key? How to implement cancelling watches?
-    pub async fn watch<K: Into<Key>>(&mut self, key: K) -> Result<(), Error> {
+    pub async fn watch<K: Into<Key>>(&self, key: K) -> Result<(), Error> {
         let key = key.into();
         let future: FDBFuture<Empty> =
             unsafe { fdb_c::fdb_transaction_watch(self.0, key.as_ptr(), key.len() as i32) }.into();

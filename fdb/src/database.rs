@@ -1,8 +1,5 @@
 use std::ptr;
-use std::ptr::NonNull;
-
 use log::error;
-
 use fdb_c::FDBDatabase;
 
 use crate::tenant::Tenant;
@@ -40,7 +37,7 @@ impl Database {
             return Err(crate::FdbErrorCode(result).into());
         }
 
-        Ok(unsafe { *tenant }.into())
+        Ok(tenant.into())
     }
 
     fn reboot_worker() {
@@ -64,7 +61,7 @@ impl Database {
 
 
 impl CreateTransaction for Database {
-    fn create_transaction(&mut self) -> Result<Transaction, crate::Error> {
+    fn create_transaction(&self) -> Result<Transaction, crate::Error> {
         let mut trx: *mut fdb_c::FDBTransaction = std::ptr::null_mut();
         let result = unsafe { fdb_c::fdb_database_create_transaction(self.0, &mut trx) };
 

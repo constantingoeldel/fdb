@@ -5,6 +5,8 @@ use log::error;
 use thiserror::Error;
 
 pub use client::Client;
+pub use database::Database;
+pub use transaction::{Transaction, CreateTransaction};
 use fdb_c::fdb_error_t;
 
 mod client;

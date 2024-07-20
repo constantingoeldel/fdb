@@ -31,7 +31,8 @@ struct FDBNetworkOptions;
 
 impl Client {
     pub async fn new() -> Result<Self, Error> {
-        Self::select_api_version(710).expect("Invalid API version");
+        println!("Running Version {}", Self::get_max_api_version());
+        Self::select_api_version(Self::get_max_api_version()).expect("Invalid API version");
 
         // Init network
         Self::setup_network(FDBNetworkOptions)?;
