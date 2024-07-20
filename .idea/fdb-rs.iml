@@ -6,6 +6,10 @@
       <sourceFolder url="file://$MODULE_DIR$/fdb-test/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fdb/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/redis-protocol/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/redis-protocol/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/redis-protocol/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/redis/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/fdb-c/target" />
       <excludeFolder url="file://$MODULE_DIR$/fdb/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />

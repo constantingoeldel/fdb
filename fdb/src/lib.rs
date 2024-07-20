@@ -1,10 +1,6 @@
 use std::ffi::CStr;
 use std::fmt::{Debug, Display, Formatter};
-use std::future::Future;
-use std::ops::{BitAnd, Deref, DerefMut};
-use std::os::fd::IntoRawFd;
 
-use futures::Stream;
 use log::error;
 use thiserror::Error;
 
@@ -94,17 +90,13 @@ mod tests {
         let mut tx = db.create_transaction().unwrap();
 
         let empty_get = tx.get("hello").await;
-
         assert_eq!(empty_get, Err(Error::KeyNotFound));
 
         tx.set("hello", "world").await;
-
         let existing_get = tx.get("hello").await;
-
         assert_eq!(existing_get, Ok("world".into()));
 
         tx.clear("hello").await;
-
         tx.commit().await.unwrap();
     }
 }
