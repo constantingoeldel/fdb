@@ -661,13 +661,21 @@ impl Transaction {
     }
 
     /// Reads a value from the database
-    async fn get(&mut self, key: Key, snapshot: bool) -> Result<Value, Error> {
+    async fn _get(&mut self, key: Key, snapshot: bool) -> Result<Value, Error> {
         let future = unsafe { fdb_c::fdb_transaction_get(&mut self.0, key.as_ptr(), key.len() as i32, snapshot as i32) };
         // TODO: make this conversion a method of future
         let future = FDBFuture { future: unsafe { *future }, target: PhantomData };
 
         future.await
     }
+
+    async fn get(&mut self, key: Key) -> Result<Value, Error> {
+        self._get(key, false).await
+    }
+    async fn snapshot_get(&mut self, key: Key) -> Result<Value, Error> {
+        self._get(key, true).await
+    }
+
 
     /// Returns an estimated byte size of the key range.
     ///
@@ -698,7 +706,7 @@ impl Transaction {
     }
 
     /// Resolves a key selector against the keys in the database snapshot represented by transaction.
-    async fn get_key(&mut self, key: Key, offset: i32, inclusive: bool, snapshot: bool) -> Result<Key, Error> {
+    async fn _get_key(&mut self, key: Key, offset: i32, inclusive: bool, snapshot: bool) -> Result<Key, Error> {
         let future = unsafe { fdb_c::fdb_transaction_get_key(&mut self.0, key.as_ptr(), key.len() as i32, inclusive as i32, offset, snapshot as i32) };
 
         let future = FDBFuture { future: unsafe { *future }, target: PhantomData };
@@ -706,21 +714,58 @@ impl Transaction {
         future.await
     }
 
-    async fn get_first_key_greater_or_equal_than(&mut self, key: Key, offset: i32, snapshot: bool) -> Result<Key, Error> {
-        self.get_key(key, 1 + offset, true, snapshot).await
+    async fn get_key(&mut self, key: Key, offset: i32, inclusive: bool) -> Result<Key, Error> {
+        self._get_key(key, offset, inclusive, false).await
     }
 
-    async fn get_first_key_greater_than(&mut self, key: Key, offset: i32, snapshot: bool) -> Result<Key, Error> {
-        self.get_key(key, 1 + offset, false, snapshot).await
+    async fn snapshot_get_key(&mut self, key: Key, offset: i32, inclusive: bool) -> Result<Key, Error> {
+        self._get_key(key, offset, inclusive, true).await
     }
 
-    async fn get_last_key_less_or_equal_than(&mut self, key: Key, offset: i32, snapshot: bool) -> Result<Key, Error> {
-        self.get_key(key, -1 + offset, true, snapshot).await
+    async fn _get_first_key_greater_or_equal_than(&mut self, key: Key, offset: i32, snapshot: bool) -> Result<Key, Error> {
+        self._get_key(key, 1 + offset, true, snapshot).await
     }
 
-    async fn get_last_key_less_than(&mut self, key: Key, offset: i32, snapshot: bool) -> Result<Key, Error> {
-        self.get_key(key, -1 + offset, false, snapshot).await
+    async fn get_first_key_greater_or_equal_than(&mut self, key: Key, offset: i32) -> Result<Key, Error> {
+        self._get_first_key_greater_or_equal_than(key, offset, false).await
     }
+    async fn snapshot_get_first_key_greater_or_equal_than(&mut self, key: Key, offset: i32) -> Result<Key, Error> {
+        self._get_first_key_greater_or_equal_than(key, offset, true).await
+    }
+
+    async fn _get_first_key_greater_than(&mut self, key: Key, offset: i32, snapshot: bool) -> Result<Key, Error> {
+        self._get_key(key, 1 + offset, false, snapshot).await
+    }
+
+    async fn get_first_key_greater_than(&mut self, key: Key, offset: i32) -> Result<Key, Error> {
+        self._get_first_key_greater_than(key, offset, false).await
+    }
+    async fn snapshot_get_first_key_greater_than(&mut self, key: Key, offset: i32) -> Result<Key, Error> {
+        self._get_first_key_greater_than(key, offset, true).await
+    }
+    
+    async fn _get_last_key_less_or_equal_than(&mut self, key: Key, offset: i32, snapshot: bool) -> Result<Key, Error> {
+        self._get_key(key, -1 + offset, true, snapshot).await
+    }
+
+    async fn get_last_key_less_or_equal_than(&mut self, key: Key, offset: i32) -> Result<Key, Error> {
+        self._get_last_key_less_or_equal_than(key, offset, false).await
+    }
+    async fn snapshot_get_last_key_less_or_equal_than(&mut self, key: Key, offset: i32) -> Result<Key, Error> {
+        self._get_last_key_less_or_equal_than(key, offset, true).await
+    }
+    
+    async fn _get_last_key_less_than(&mut self, key: Key, offset: i32, snapshot: bool) -> Result<Key, Error> {
+        self._get_key(key, -1 + offset, false, snapshot).await
+    }
+
+    async fn get_last_key_less_than(&mut self, key: Key, offset: i32) -> Result<Key, Error> {
+        self._get_last_key_less_than(key, offset, false).await
+    }
+    async fn snapshot_get_last_key_less_than(&mut self, key: Key, offset: i32) -> Result<Key, Error> {
+        self._get_last_key_less_than(key, offset, true).await
+    }
+
 
     /// Returns a list of public network addresses as strings, one for each of the storage servers
     /// responsible for storing the key and its associated value.
@@ -928,9 +973,8 @@ impl Transaction {
             error!("{result}");
             return Err(FdbErrorCode(result).into());
         }
-        
+
         Ok(())
-        
     }
 
 
