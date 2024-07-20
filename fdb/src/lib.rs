@@ -16,7 +16,7 @@ use log::{error, info, warn};
 use thiserror::Error;
 use tokio::task;
 
-use fdb_c::{FDB_API_VERSION, FDB_database, fdb_error_t, FDB_future, fdb_network_set_option, FDBDatabase, FDBKey, FDBKeyValue, FDBMutationType_FDB_MUTATION_TYPE_ADD, FDBMutationType_FDB_MUTATION_TYPE_AND, FDBMutationType_FDB_MUTATION_TYPE_BYTE_MAX, FDBMutationType_FDB_MUTATION_TYPE_BYTE_MIN, FDBMutationType_FDB_MUTATION_TYPE_COMPARE_AND_CLEAR, FDBMutationType_FDB_MUTATION_TYPE_MAX, FDBMutationType_FDB_MUTATION_TYPE_MIN, FDBMutationType_FDB_MUTATION_TYPE_OR, FDBMutationType_FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_KEY, FDBMutationType_FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_VALUE, FDBMutationType_FDB_MUTATION_TYPE_XOR, FDBNetworkOption, FDBStreamingMode, FDBTenant, FDBTransaction};
+use fdb_c::{FDB_API_VERSION, FDB_database, fdb_error_t, FDB_future, fdb_network_set_option, FDBConflictRangeType_FDB_CONFLICT_RANGE_TYPE_READ, FDBConflictRangeType_FDB_CONFLICT_RANGE_TYPE_WRITE, FDBDatabase, FDBKey, FDBKeyValue, FDBMutationType_FDB_MUTATION_TYPE_ADD, FDBMutationType_FDB_MUTATION_TYPE_AND, FDBMutationType_FDB_MUTATION_TYPE_BYTE_MAX, FDBMutationType_FDB_MUTATION_TYPE_BYTE_MIN, FDBMutationType_FDB_MUTATION_TYPE_COMPARE_AND_CLEAR, FDBMutationType_FDB_MUTATION_TYPE_MAX, FDBMutationType_FDB_MUTATION_TYPE_MIN, FDBMutationType_FDB_MUTATION_TYPE_OR, FDBMutationType_FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_KEY, FDBMutationType_FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_VALUE, FDBMutationType_FDB_MUTATION_TYPE_XOR, FDBNetworkOption, FDBStreamingMode, FDBTenant, FDBTransaction};
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -62,6 +62,19 @@ impl From<FdbErrorCode> for Error {
             2008 => Error::ActionInvalidBeforeNetworkConfig,
             _ => Error::Generic(FdbErrorCode(value.0)),
         }
+    }
+}
+
+impl From<&Error> for FdbErrorCode {
+    fn from(value: &Error) -> Self {
+        FdbErrorCode(match value {
+            Error::APIVersionNotSupported => 2203,
+            Error::APIVersionSingletonViolated => 2201,
+            Error::NetworkSingletonViolated => 2009,
+            Error::ActionInvalidBeforeNetworkConfig => 2008,
+            Error::Generic(i) => i.0,
+            _ => -1
+        })
     }
 }
 
@@ -613,6 +626,31 @@ impl CreateTransaction for Tenant {
     }
 }
 
+type TransactionLogic<R> = fn(&mut Transaction) -> R;
+
+async fn exec(mut tx: Transaction, f: TransactionLogic<impl Future<Output=Result<(), Error>>>) -> Result<(), Error> {
+    let result = f(&mut tx).await;
+
+    match result {
+        Ok(r) => Ok(r),
+        Err(e) => {
+            let error_code = FdbErrorCode::from(&e);
+            let error_handling_fut = unsafe { fdb_c::fdb_transaction_on_error(&mut tx.0, error_code.0) };
+            let error_handling_fut: FDBFuture<Empty> = FDBFuture { future: unsafe { *error_handling_fut }, target: PhantomData };
+
+            let should_be_retried = error_handling_fut.await.is_ok();
+
+            if should_be_retried {
+
+                // Recursion in async functions requires boxing
+                Box::pin(exec(tx, f)).await
+            } else {
+                Err(e)
+            }
+        }
+    }
+}
+
 impl Transaction {
     fn set_option() -> Result<(), Error> {
         todo!()
@@ -853,34 +891,81 @@ impl Transaction {
         unsafe { fdb_c::fdb_transaction_atomic_op(&mut self.0, key.as_ptr(), key.len() as i32, value.as_ptr(), value.len() as i32, operation_type) }
     }
 
+    /// Returns the approximate transaction size so far in the returned future, which is the summation
+    /// of the estimated size of mutations, read conflict ranges, and write conflict ranges.
+    ///
+    /// This can be called multiple times before the transaction is committed.
+    ///
+    /// The maximum allowed transaction size is 10MB.
+    async fn get_approximate_size(&mut self) -> Result<Int64, Error> {
+        let future = unsafe { fdb_c::fdb_transaction_get_approximate_size(&mut self.0) };
+
+        let future = FDBFuture { future: unsafe { *future }, target: PhantomData };
+
+        future.await
+    }
+
+    /// TODO: perhaps make this a method of Key? How to implement cancelling watches?
+    async fn watch(&mut self, key: Key) -> Result<Empty, Error> {
+        let future = unsafe { fdb_c::fdb_transaction_watch(&mut self.0, key.as_ptr(), key.len() as i32) };
+
+        let future = FDBFuture { future: unsafe { *future }, target: PhantomData };
+
+        future.await
+    }
+
+
+
+    /// Adds a conflict range to a transaction without performing the associated read or write.
+    async fn add_conflict_range(&mut self, start: Key, end: Key, conflict_type: ConflictType) -> Result<(), Error> {
+        let t = match conflict_type {
+            ConflictType::Read => FDBConflictRangeType_FDB_CONFLICT_RANGE_TYPE_READ,
+            ConflictType::Write => FDBConflictRangeType_FDB_CONFLICT_RANGE_TYPE_WRITE,
+        }
+        let result = unsafe { fdb_c::fdb_transaction_add_conflict_range(&mut self.0, start.as_ptr(), start.len() as i32, end.as_ptr(), end.len() as i32, t)};
+
+        if result != 0 {
+            error!("{result}");
+            return Err(FdbErrorCode(result).into());
+        }
+        
+        Ok(())
+        
+    }
+
+
+    /// Cancels the transaction.
+    async fn cancel(mut self) {
+        unsafe  { fdb_c::fdb_transaction_cancel(&mut self.0) }
+    }
+
+
     /// Consume a readonly transaction, thereby destroying it (readonly transactions don't need to be committed)
     async fn commit_readonly(self) {
         drop(self)
     }
 
-    async fn commit(mut self) -> Result<CommitVersion, Error> {
+    async fn commit(mut self) -> Result<(), Error> {
         let future = unsafe { fdb_c::fdb_transaction_commit(&mut self.0) };
 
         let commit_fut = FDBFuture { future: unsafe { *future }, target: PhantomData };
 
         let _commited: Empty = commit_fut.await?;
 
-        let mut version = i64::MIN;
-
-        let result = unsafe { fdb_c::fdb_transaction_get_committed_version(&mut self.0, &mut version) };
-
-        if result != 0 {
-            error!("{result}");
-            return Err(FdbErrorCode(result).into());
-        };
-
-        assert_ne!(version, i64::MIN);
-
-        Ok(version)
+        Ok(())
     }
+
+
+    // Not implemented: (Because not deemed necessary)
+    // -fdb_transaction_get_committed_version
+    // - fdb_transaction_get_versionstamp
+    // - reset (just create a new one)
 }
 
-type CommitVersion = i64;
+enum ConflictType {
+    Read,
+    Write,
+}
 
 
 struct KeySelector {
