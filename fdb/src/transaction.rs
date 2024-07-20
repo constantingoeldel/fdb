@@ -649,12 +649,12 @@ impl Transaction {
     }
 
     /// Cancels the transaction.
-    pub async fn cancel(mut self) {
+    pub fn cancel(mut self) {
         unsafe { fdb_c::fdb_transaction_cancel(self.0) }
     }
 
     /// Consume a readonly transaction, thereby destroying it (readonly transactions don't need to be committed)
-    pub async fn commit_readonly(self) {
+    pub fn commit_readonly(self) {
         drop(self)
     }
 
