@@ -89,7 +89,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_simple_transaction() {
-        println!("hello");
         let client = Client::new().await.unwrap();
         let mut db = client.database().unwrap();
         let mut tx = db.create_transaction().unwrap();
@@ -99,11 +98,12 @@ mod tests {
         assert_eq!(empty_get, Err(Error::KeyNotFound));
 
         tx.set("hello", "world").await;
-        
+
         let existing_get = tx.get("hello").await;
-        
-        
+
         assert_eq!(existing_get, Ok("world".into()));
+
+        tx.clear("hello").await;
 
         tx.commit().await.unwrap();
     }

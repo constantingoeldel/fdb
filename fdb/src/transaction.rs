@@ -70,9 +70,7 @@ impl Transaction {
         let future: FDBFuture<Value> = unsafe {
             fdb_c::fdb_transaction_get(self.0, key.as_ptr(), key.len() as i32, snapshot as i32)
         }.into();
-        println!("Tokio do your thing");
         let handle = tokio::spawn(future);
-        dbg!(&handle);
         handle.await.unwrap()
     }
 
