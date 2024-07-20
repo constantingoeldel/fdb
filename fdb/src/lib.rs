@@ -921,7 +921,7 @@ impl Transaction {
         let t = match conflict_type {
             ConflictType::Read => FDBConflictRangeType_FDB_CONFLICT_RANGE_TYPE_READ,
             ConflictType::Write => FDBConflictRangeType_FDB_CONFLICT_RANGE_TYPE_WRITE,
-        }
+        };
         let result = unsafe { fdb_c::fdb_transaction_add_conflict_range(&mut self.0, start.as_ptr(), start.len() as i32, end.as_ptr(), end.len() as i32, t)};
 
         if result != 0 {
