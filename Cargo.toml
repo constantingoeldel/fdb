@@ -1,2 +1,3 @@
 [workspace]
 members = ["fdb", "fdb-test", "fdb-c"]
+resolver = "2"
