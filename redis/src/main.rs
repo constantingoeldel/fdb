@@ -1,17 +1,15 @@
-mod parser;
-
 use std::io;
 use std::ops::Deref;
 
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
+use redis_protocol::resp3::decode::complete::decode_bytes_mut;
+use redis_protocol::resp3::types::Resp3Frame;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-use redis_protocol::resp3::decode::complete::decode_bytes_mut;
-use redis_protocol::resp3::encode::complete::encode_bytes;
-use redis_protocol::resp3::types::{BytesFrame, Resp3Frame};
-use fdb::{CreateTransaction, Database};
+use fdb::CreateTransaction;
 
+mod parser;
 
 #[tokio::main]
 async fn main() -> Result<(), io::Error> {

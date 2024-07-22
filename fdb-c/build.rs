@@ -34,7 +34,7 @@ fn main() {
         panic!("You must select a version feature for foundation_db")
     }
 
-    println!("cargo:rustc-link-search=native={}", "/usr/local/lib/");
+    println!("cargo:rustc-link-search=native={}", "/nix/store/i9nfm95bakqnlcgxk1d0bvd3sz751539-foundationdb-7.1.32-lib/lib");
 
     println!("cargo:rustc-link-lib=fdb_c");
 

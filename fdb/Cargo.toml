@@ -21,3 +21,6 @@ log = "0.4.22"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 async-stream = "0.3.5"
+
+[dev-dependencies]
+fdb-c = { path = "../fdb-c", features = ["710"] }

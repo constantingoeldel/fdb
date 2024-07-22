@@ -50,6 +50,7 @@ impl Client {
     fn select_api_version(version: i32) -> Result<(), Error> {
 
         if version > FDB_API_VERSION as i32 || version > Self::get_max_api_version() || ![510, 520, 600, 610, 620, 630, 700, 710, 730].contains(&version) {
+            dbg!(version, FDB_API_VERSION);
             return Err(Error::APIVersionNotSupported);
         }
 
