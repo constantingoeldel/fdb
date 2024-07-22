@@ -1,6 +1,5 @@
 use std::ops::{Deref, DerefMut};
 
-use fdb_c::FDBKey;
 
 use crate::future::from_raw_fdb_slice;
 
@@ -16,12 +15,6 @@ impl Deref for Key {
 impl DerefMut for Key {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
-    }
-}
-
-impl From<FDBKey> for Key {
-    fn from(value: FDBKey) -> Self {
-        Key(from_raw_fdb_slice(value.key, value.key_length as usize).to_owned())
     }
 }
 

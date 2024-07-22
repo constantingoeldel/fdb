@@ -1,6 +1,6 @@
 use std::ffi::c_char;
 use std::ptr;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::task::Poll;
 
 use futures::poll;
@@ -19,7 +19,7 @@ pub struct Client;
 
 static NETWORK_SETUP: AtomicBool = AtomicBool::new(false);
 static NETWORK_STARTED: AtomicBool = AtomicBool::new(false);
-static API_VERSION_SET: AtomicBool = AtomicBool::new(false);
+static API_VERSION_SET: AtomicI32 = AtomicI32::new(0);
 
 /// Must be called before any other API functions. version must be less than or equal to FDB_API_VERSION (and should almost always be equal).
 ///
@@ -31,13 +31,12 @@ struct FDBNetworkOptions;
 
 impl Client {
     pub async fn new() -> Result<Self, Error> {
-        println!("Running Version {}", Self::get_max_api_version());
         Self::select_api_version(Self::get_max_api_version()).expect("Invalid API version");
 
         // Init network
         Self::setup_network(FDBNetworkOptions)?;
 
-        let handle: task::JoinHandle<_> = task::spawn_blocking(|| Self::run_network());
+        let handle: task::JoinHandle<_> = task::spawn_blocking(Self::run_network);
 
         // Poll the network once to check if it errored on initialization
         let poll = poll!(handle);
@@ -49,21 +48,28 @@ impl Client {
     }
 
     fn select_api_version(version: i32) -> Result<(), Error> {
-        let first_time = API_VERSION_SET
-            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
-            .is_ok();
 
-        if !first_time {
-            return Err(Error::APIVersionSingletonViolated);
-        }
-
-        if version > FDB_API_VERSION as i32 || version > Self::get_max_api_version() {
+        if version > FDB_API_VERSION as i32 || version > Self::get_max_api_version() || ![510, 520, 600, 610, 620, 630, 700, 710, 730].contains(&version) {
             return Err(Error::APIVersionNotSupported);
         }
 
         if version != FDB_API_VERSION as i32 {
             warn!("Selected API version should almost always be equal to the foundation db version feature")
         }
+
+        let atomic_version_update = API_VERSION_SET
+            .compare_exchange(0, version, Ordering::Acquire, Ordering::Relaxed);
+
+
+        if let Err(previous_version)  = atomic_version_update {
+            if previous_version == version {
+                // API Version already set to the same version as requested
+                return Ok(());
+            }
+            println!("API Version already set to a different version: {previous_version}");
+            return Err(Error::APIVersionSingletonViolated);
+        }
+
 
         let result = unsafe { fdb_c::fdb_select_api_version_impl(version, FDB_API_VERSION as i32) };
 
@@ -188,17 +194,30 @@ mod tests {
 
     #[test]
     fn test_api_version() {
-        #[cfg(feature = "fdb_730")]
+        #[cfg(feature = "730")]
         assert_eq!(fdb_c::FDB_API_VERSION, 730);
-        #[cfg(feature = "fdb_710")]
+        #[cfg(feature = "710")]
         assert_eq!(fdb_c::FDB_API_VERSION, 710);
+        #[cfg(feature = "700")]
+        assert_eq!(fdb_c::FDB_API_VERSION, 700);
+        #[cfg(feature = "630")]
+        assert_eq!(fdb_c::FDB_API_VERSION, 630);
+        #[cfg(feature = "620")]
+        assert_eq!(fdb_c::FDB_API_VERSION, 620);
+        #[cfg(feature = "610")]
+        assert_eq!(fdb_c::FDB_API_VERSION, 610);
+        #[cfg(feature = "600")]
+        assert_eq!(fdb_c::FDB_API_VERSION, 600);
+        #[cfg(feature = "520")]
+        assert_eq!(fdb_c::FDB_API_VERSION, 520);
+        #[cfg(feature = "510")]
+        assert_eq!(fdb_c::FDB_API_VERSION, 510);
     }
 
     #[test]
     fn test_select_invalid_api_version() {
         let result = Client::select_api_version(99999);
-
-        dbg!(&result);
+        
         assert!(result.is_err());
         assert_eq!(result, Err(Error::APIVersionNotSupported))
     }
@@ -206,31 +225,20 @@ mod tests {
     #[test]
     fn test_select_api_version() {
         let result = Client::select_api_version(Client::get_max_api_version());
-        dbg!(&result);
         assert!(result.is_ok());
-    }
 
-    #[test]
-    fn test_select_api_version_again() {
-        let result = Client::select_api_version(2);
-
-        dbg!(&result);
-        assert!(result.is_err());
-        assert_eq!(result, Err(Error::APIVersionSingletonViolated))
-    }
-
-    #[test]
-    fn test_max_api_version() {
-        let version = Client::get_max_api_version();
-        assert_eq!(version, 710);
+        let result = Client::select_api_version(510);
+        #[cfg(feature = "510")]
+        assert!(result.is_ok());
+        #[cfg(not(feature = "510"))]
+        assert_eq!(result, Err(Error::APIVersionSingletonViolated));
     }
 
     #[tokio::test]
     async fn init_client_idempotent() {
         let client = Client::new().await;
         let client2 = Client::new().await;
-        dbg!(&client);
-        dbg!(&client2);
+      
         assert!(client.is_ok());
         assert!(client.is_ok());
     }

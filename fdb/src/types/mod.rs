@@ -1,10 +1,19 @@
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref};
+
+mod key;
+mod value;
+
 
 pub use key::{Key, KeySelector};
 pub use value::Value;
 
-mod key;
-mod value;
+#[cfg(any(feature = "730", feature = "710", feature = "700"))]
+mod key_array;
+
+#[cfg(any(feature = "730", feature = "710", feature = "700"))]
+pub use key_array::KeyArray;
+
+
 
 pub struct Empty(());
 
@@ -22,14 +31,6 @@ impl From<i64> for Int64 {
     }
 }
 
-
-pub struct KeyArray(Vec<Key>);
-
-impl From<Vec<Key>> for KeyArray {
-    fn from(value: Vec<Key>) -> Self {
-        KeyArray(value)
-    }
-}
 
 pub struct StringArray(Vec<String>);
 

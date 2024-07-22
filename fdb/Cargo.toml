@@ -4,16 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["fdb-c/fdb_710"]
-510 = ["fdb-c/fdb_510"]
-520 = ["fdb-c/fdb_520"]
-600 = ["fdb-c/fdb_600"]
-610 = ["fdb-c/fdb_610"]
-620 = ["fdb-c/fdb_620"]
-630 = ["fdb-c/fdb_630"]
-700 = ["fdb-c/fdb_700"]
-710 = ["fdb-c/fdb_710"]
-730 = ["fdb-c/fdb_730"]
+510 = ["fdb-c/510"]
+520 = ["fdb-c/520"]
+600 = ["fdb-c/600"]
+610 = ["fdb-c/610"]
+620 = ["fdb-c/620"]
+630 = ["fdb-c/630"]
+700 = ["fdb-c/700"]
+710 = ["fdb-c/710"]
+730 = ["fdb-c/730"]
 
 [dependencies]
 fdb-c = {path = "../fdb-c"  }

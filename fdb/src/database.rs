@@ -2,7 +2,9 @@ use std::ptr;
 use log::error;
 use fdb_c::FDBDatabase;
 
+#[cfg(any(feature = "730", feature = "710"))]
 use crate::tenant::Tenant;
+
 use crate::transaction::{CreateTransaction, Transaction};
 
 pub struct Database(*mut FDBDatabase);
@@ -19,6 +21,7 @@ impl Database {
         todo!()
     }
 
+    #[cfg(any(feature = "730", feature = "710"))]
     fn tenant(&mut self, name: &str) -> Result<Tenant, crate::Error> {
         let tenant_name = name.as_bytes();
         let mut tenant = ptr::null_mut();
@@ -54,6 +57,7 @@ impl Database {
 
     /// Returns a value where 0 indicates that the client is idle and 1 (or larger) indicates
     /// that the client is saturated. By default, this value is updated every second.
+    #[cfg(any(feature = "730", feature = "710", feature = "700"))]
     fn get_main_thread_busyness(&mut self) -> f64 {
         unsafe { fdb_c::fdb_database_get_main_thread_busyness(self.0) }
     }

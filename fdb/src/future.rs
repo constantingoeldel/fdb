@@ -10,10 +10,10 @@ use std::task::{Context, Poll, RawWaker, Waker};
 
 use log::error;
 
-use fdb_c::{FDB_future, FDBCallback, FDBKey};
+use fdb_c::{FDB_future};
 
 use crate::{Error, FdbErrorCode};
-use crate::types::{Empty, Int64, Key, KeyArray, KeyValueArray, StringArray, Value};
+use crate::types::*;
 
 pub trait FDBResult: Sized {
     fn from_future(future: *mut FDB_future) -> Result<Self, Error>;
@@ -57,7 +57,7 @@ impl<T: FDBResult> Future for FDBFuture<T> {
         let ready = unsafe { fdb_c::fdb_future_is_ready(future) };
 
         if ready == 0 {
-            unsafe extern "C" fn future_ready_callback(future: *mut FDB_future, callback_parameter: *mut std::os::raw::c_void,
+            unsafe extern "C" fn future_ready_callback(_future: *mut FDB_future, callback_parameter: *mut std::os::raw::c_void,
             ) {
                 let waker: Box<Waker> = Box::from_raw(callback_parameter.cast());
                 waker.wake_by_ref()
@@ -143,7 +143,7 @@ impl FDBResult for Key {
         // Check that dummy value has been overwritten
         assert_ne!(key_length, i32::MIN);
 
-        let key: Key = FDBKey { key, key_length }.into();
+        let key: Key = from_raw_fdb_slice(key, key_length as usize).to_owned().into();
 
         assert_eq!(key.len(), key_length as usize);
 
@@ -184,7 +184,9 @@ impl FDBResult for Value {
     }
 }
 
+#[cfg(any(feature = "730", feature = "710", feature = "700"))]
 impl FDBResult for KeyArray {
+
     fn from_future(future: *mut FDB_future) -> Result<Self, Error> {
         let mut keys = ptr::null();
         let mut key_count = i32::MIN;
@@ -198,8 +200,8 @@ impl FDBResult for KeyArray {
         // TODO: Is this stupid to check?
         assert_ne!(key_count, i32::MIN);
 
-        let keys: Vec<FDBKey> = from_raw_fdb_slice(keys, key_count as usize).to_owned();
-        let keys: Vec<Key> = keys.into_iter().map(|k| k.into()).collect();
+        let keys: Vec<fdb_c::FDBKey> = from_raw_fdb_slice(keys, key_count as usize).to_owned();
+        let keys: Vec<Key> = keys.into_iter().map(|k| from_raw_fdb_slice(k.key, k.key_length as usize).to_owned().into()).collect();
 
         assert_eq!(keys.len(), key_count as usize);
 

@@ -8,7 +8,7 @@ use fdb_c::{FDBConflictRangeType_FDB_CONFLICT_RANGE_TYPE_READ, FDBConflictRangeT
 
 use crate::{Error, FdbErrorCode};
 use crate::future::FDBFuture;
-use crate::types::{Empty, Int64, Key, KeyArray, KeySelector, KeyValueArray, StringArray, Value};
+use crate::types::*;
 
 pub struct Transaction(*mut FDBTransaction);
 
@@ -67,10 +67,13 @@ impl Transaction {
 
     /// Reads a value from the database
     async fn _get(&self, key: Key, snapshot: bool) -> Result<Value, Error> {
+
         let future: FDBFuture<Value> = unsafe {
             fdb_c::fdb_transaction_get(self.0, key.as_ptr(), key.len() as i32, snapshot as i32)
         }.into();
+
         let handle = tokio::spawn(future);
+        
         handle.await.unwrap()
     }
 
@@ -114,6 +117,7 @@ impl Transaction {
         Ok(size.0)
     }
     /// Returns a list of keys that can split the given range into (roughly) equally sized chunks based on chunk_size.
+    #[cfg(any(feature = "730", feature = "710", feature = "700"))]
     pub async fn get_range_split_points<K: Into<Key>>(
         &mut self,
         start: K,
@@ -672,7 +676,7 @@ impl Transaction {
     // - reset (just create a new one)
 }
 
-enum ConflictType {
+pub enum ConflictType {
     Read,
     Write,
 }
