@@ -5,13 +5,9 @@ use nom::{Finish, IResult};
 use nom::bytes::complete::is_not;
 use nom::character::complete::char;
 use nom::sequence::delimited;
+use crate::parser::protocol::ParsedValues;
 
-use crate::parser::{parsed_value, ParsedValues, TryParse};
-use crate::parser::integer::{Integer, parse_digits};
-use crate::parser::simple_string::SimpleString;
-use crate::parser::terminator::terminator;
-
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub(super) struct Map(HashMap<ParsedValues, ParsedValues>);
 
 impl Deref for Map {

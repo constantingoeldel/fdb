@@ -4,11 +4,7 @@ use nom::character::complete::char;
 use nom::Err::Error;
 use nom::sequence::{delimited, terminated};
 
-use crate::parser::integer::parse_digits;
-use crate::parser::terminator::terminator;
-use crate::parser::TryParse;
-
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub(super) struct VerbatimString(String);
 
 impl From<&str> for VerbatimString {

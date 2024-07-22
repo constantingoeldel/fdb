@@ -9,11 +9,11 @@ use nom::IResult;
 use nom::sequence::{delimited, tuple};
 use serde::Deserialize;
 
-use crate::parser::terminator::terminator;
-use crate::parser::TryParse;
+use crate::parser::protocol::terminator::terminator;
+use crate::parser::protocol::TryParse;
 
 #[derive(Eq, PartialEq, Debug, Hash, Deserialize)]
-pub(super) struct Integer(i64);
+pub struct Integer(i64);
 
 impl Into<i64> for Integer {
     fn into(self) -> i64 {

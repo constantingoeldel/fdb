@@ -10,7 +10,7 @@ use std::task::{Context, Poll, RawWaker, Waker};
 
 use log::error;
 
-use fdb_c::{FDB_future};
+use fdb_c::FDB_future;
 
 use crate::{Error, FdbErrorCode};
 use crate::types::*;
@@ -79,7 +79,7 @@ impl<T: FDBResult> Future for FDBFuture<T> {
         let result = Poll::Ready(T::from_future(future));
 
         // The memory referenced by the result is owned by the FDBFuture object and will be valid until fdb_future_destroy(future) is called.
-        // All the types implementing FDBResult must have ownership of their content at this point.
+        // All the protocol implementing FDBResult must have ownership of their content at this point.
         unsafe { fdb_c::fdb_future_destroy(future) }
 
         result

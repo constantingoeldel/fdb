@@ -1,36 +1,36 @@
-use nom::branch::alt;
+use nom::{Finish, IResult};
 use nom::bytes::complete::tag;
 use nom::combinator::opt;
-use nom::{Finish, IResult};
 use nom::sequence::tuple;
+use serde::{Deserialize, Serialize};
 
-use crate::parser::bulk_string::bulk_string;
-use crate::parser::integer::{integer, Integer};
-use crate::parser::simple_string::simple_string;
-use crate::parser::verbatim_string::verbatim_string;
+use crate::parser::protocol::{integer, string, TryParse};
 
-use super::TryParse;
-
-fn string(i: &[u8]) -> IResult<&[u8], &[u8]> {
-    alt((simple_string, bulk_string, verbatim_string))(i)
+#[derive(Deserialize, Serialize, Debug)]
+pub struct Hello {
+    pub options: Option<ClientHandshakeOptions>,
 }
 
-struct AuthUsernamePassword {
-    username: String,
-    password: String,
-}
-
-struct SetClientName {
-    name: String,
-}
-
-pub struct ClientHandshake {
+#[derive(Deserialize, Serialize, Debug)]
+pub struct ClientHandshakeOptions {
     pub protocol_version: i64,
     pub auth: Option<AuthUsernamePassword>,
     pub setname: Option<SetClientName>,
 }
 
-impl<'a> TryParse<'a> for ClientHandshake {
+#[derive(Deserialize, Serialize, Debug)]
+struct AuthUsernamePassword {
+    username: String,
+    password: String,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct SetClientName {
+    clientname: String,
+}
+
+
+impl<'a> TryParse<'a> for Hello {
     type Output = Self;
 
     fn try_parse(value: &'a[u8]) -> Result<(&'a[u8], Self::Output), nom::error::Error<&'a[u8]>> {
@@ -38,6 +38,7 @@ impl<'a> TryParse<'a> for ClientHandshake {
         Ok((i, ch))
     }
 }
+
 
 fn client_handshake(i: &[u8]) -> IResult<&[u8], ClientHandshake> {
     fn hello(i: &[u8]) -> IResult<&[u8], &[u8]> {
@@ -85,7 +86,7 @@ fn client_handshake(i: &[u8]) -> IResult<&[u8], ClientHandshake> {
     let (i, (_, options)) = tuple((hello, opt(tuple((protocol_version, opt(auth_username_password), opt(set_client_name))))))(i)?;
 
 
-    let mut ch = ClientHandshake {
+    let mut ch = ClientHandshakeOptions {
         protocol_version: 2,
         auth: None,
         setname: None,
@@ -96,17 +97,21 @@ fn client_handshake(i: &[u8]) -> IResult<&[u8], ClientHandshake> {
         let protocol_version : i64 = protocol_version.into();
         assert!((2..=3).contains(&protocol_version));
         ch.protocol_version = protocol_version;
-        
+
         if let Some(auth) = auth {
             ch.auth = Some(auth);
         }
-        
+
         if let Some(setname) = setname {
             ch.setname = Some(setname);
         }
     }
 
-    Ok((i, ch))
+    let handshake = ClientHandshake {
+        options: Some(ch),
+    };
+
+    Ok((i, handshake))
 }
 
 #[test]

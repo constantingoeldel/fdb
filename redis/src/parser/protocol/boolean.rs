@@ -2,16 +2,16 @@ use nom::{Finish, IResult};
 use nom::bytes::complete::is_not;
 use nom::character::complete::char;
 use nom::sequence::delimited;
+use crate::parser::protocol::terminator::terminator;
+use crate::parser::protocol::TryParse;
 
-use crate::parser::terminator::terminator;
-use crate::parser::TryParse;
-
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub struct Boolean(bool);
 
 pub fn boolean(i: &[u8]) -> IResult<&[u8], &[u8]> {
     delimited(char('#'), is_not("\r\n"), terminator)(i)
 }
+
 
 
 impl<'a> TryParse<'a> for Boolean {
@@ -37,7 +37,6 @@ fn test_true() {
     let (rem, res) = Boolean::try_parse(s).unwrap();
     assert_eq!(rem, b"");
     assert_eq!(res, Boolean(true));
-    
 }
 
 #[test]

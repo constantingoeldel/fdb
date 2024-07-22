@@ -5,13 +5,12 @@ use nom::character::complete::char;
 use nom::combinator::opt;
 use nom::IResult;
 use nom::sequence::{delimited, tuple};
-
-use crate::parser::integer::{parse_digits, sign};
-use crate::parser::terminator::terminator;
-use crate::parser::TryParse;
+use crate::parser::protocol::integer::{parse_digits, sign};
+use crate::parser::protocol::terminator::terminator;
+use crate::parser::protocol::TryParse;
 
 #[derive(PartialEq, Debug)]
-pub(super) struct Double(f64);
+pub struct Double(f64);
 
 impl From<f64> for Double {
     fn from(i: f64) -> Self {

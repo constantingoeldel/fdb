@@ -3,7 +3,7 @@ use nom::bytes::complete::tag;
 
 use crate::parser::TryParse;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub struct Null;
 
 pub fn null(i: &[u8]) -> IResult<&[u8], &[u8]> {

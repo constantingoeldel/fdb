@@ -9,7 +9,7 @@ use crate::parser::terminator::terminator;
 use crate::parser::TryParse;
 
 // TODO: Variable Size limit? See Bulk String
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub(super) struct BulkError(String);
 
 impl From<&str> for BulkError {

@@ -7,11 +7,7 @@ use nom::sequence::delimited;
 use num_bigint::BigInt;
 use num_traits::Num;
 
-use crate::parser::integer::sign;
-use crate::parser::terminator::terminator;
-use crate::parser::TryParse;
-
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Hash)]
 pub(super) struct BigNumber(num_bigint::BigInt);
 
 
