@@ -25,8 +25,18 @@ mod array;
 mod null_array;
 mod null;
 mod boolean;
+mod double;
+mod big_number;
+mod bulk_error;
+mod verbatim_string;
+mod maps;
+mod set;
+mod push;
+mod handshake;
 
-trait TryParse<'a> {
+pub use handshake::ClientHandshake;
+
+pub trait TryParse<'a> {
     /// The type of the parsed value
     ///
     /// This is a hacky workaround to avoid requiring implementing types to be :sized
@@ -51,7 +61,7 @@ trait TryParse<'a> {
 }
 
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub enum ParsedValues {
     Integer(Integer),
     SimpleString(SimpleString),

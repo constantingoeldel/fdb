@@ -8,6 +8,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 use fdb::CreateTransaction;
+use crate::parser::ClientHandshake;
 
 mod parser;
 
@@ -17,9 +18,7 @@ async fn main() -> Result<(), io::Error> {
     listener.set_ttl(100).expect("Could not set TTL");
     let fdb_client = fdb::Client::new().await.expect("Could not initialize foundation db client");
     let db = fdb_client.database().unwrap();
-    let mut state = State {
-        state: States::Start
-    };
+    
 
     loop {
         let (mut socket, address) = listener.accept().await?;
@@ -52,24 +51,12 @@ async fn main() -> Result<(), io::Error> {
     }
 }
 
-#[derive()]
-struct State {
-    state: States,
-}
 
-
-#[derive()]
-enum States {
-    Start,
-    Command(Commands),
-    Invalid(String),
-}
-
-#[derive()]
 enum Commands {
     Get(Get),
     Set(Set),
     GetDel(GetDel),
+    Hello(ClientHandshake)
 }
 
 

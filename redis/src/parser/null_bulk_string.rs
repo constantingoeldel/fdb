@@ -2,7 +2,7 @@ use nom::{Finish, IResult};
 use nom::bytes::complete::tag;
 use crate::parser::TryParse;
 
-#[derive(Eq, Debug, PartialEq)]
+#[derive(Eq, Debug, PartialEq, Hash)]
 pub(super) struct NullBulkString;
 
 pub fn null_bulk_string(i: &[u8]) -> IResult<&[u8], &[u8]> {

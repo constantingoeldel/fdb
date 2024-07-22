@@ -6,7 +6,7 @@ use nom::sequence::delimited;
 use crate::parser::terminator::terminator;
 use crate::parser::TryParse;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub(super) struct SimpleError(String);
 
 impl From<&str> for SimpleError {

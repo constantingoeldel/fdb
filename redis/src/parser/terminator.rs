@@ -5,7 +5,7 @@ use nom::bytes::complete::tag;
 
 use crate::parser::TryParse;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub(super) struct Terminator;
 
 pub fn terminator(i: &[u8]) -> IResult<&[u8], &[u8]> {

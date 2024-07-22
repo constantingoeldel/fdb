@@ -3,7 +3,7 @@ use nom::{IResult, Finish};
 
 use crate::parser::TryParse;
 
-#[derive(Eq, Debug, PartialEq)]
+#[derive(Eq, Debug, PartialEq, Hash)]
 pub struct NullArray;
 
 pub fn null_array(i: &[u8]) -> IResult<&[u8], &[u8]> {

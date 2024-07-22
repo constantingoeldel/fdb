@@ -12,7 +12,7 @@ use crate::parser::TryParse;
 /// Redis limits it to 512 MB (see the proto-max-bulk-len configuration directive).
 ///
 /// TODO: Implement the variable limit
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub(super) struct BulkString(String);
 
 impl From<&str> for BulkString {
@@ -65,8 +65,8 @@ fn test_bulk_string_too_large() {
 }
 
 #[test]
-#[should_panic]
 fn test_bulk_string_with_wrong_size() {
     let s: &[u8] = b"$6\r\nfoobarssss\r\n";
-    let (rem, r) = BulkString::try_parse(s).unwrap();
+    let r = BulkString::try_parse(s);
+    assert!(r.is_err());
 }

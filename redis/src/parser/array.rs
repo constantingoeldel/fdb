@@ -1,20 +1,14 @@
 use std::ops::Deref;
 
 use nom::{Finish, IResult};
-use nom::branch::alt;
 use nom::bytes::complete::is_not;
 use nom::character::complete::char;
 use nom::sequence::delimited;
 
-use crate::parser::{ParsedValues, TryParse};
-use crate::parser::bulk_string::bulk_string;
-use crate::parser::integer::integer;
-use crate::parser::null_bulk_string::null_bulk_string;
-use crate::parser::simple_error::simple_error;
-use crate::parser::simple_string::simple_string;
+use crate::parser::{parsed_value, ParsedValues, TryParse};
 use crate::parser::terminator::terminator;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub(super) struct Array(Vec<ParsedValues>);
 
 impl Deref for Array {
@@ -33,7 +27,7 @@ pub fn array(input: &[u8]) -> IResult<&[u8], &[u8]> {
 
     let mut j = i;
     for _ in 0..len {
-        let (k, _) = alt((bulk_string, integer, simple_string, simple_error, null_bulk_string, array))(j)?;
+        let (k, _) = parsed_value(j)?;
         j = k;
     }
 
@@ -48,7 +42,7 @@ impl<'a> TryParse<'a> for Array {
         let (rem, array) = array(value).finish()?;
 
 
-        let mut res: Vec<ParsedValues> = Vec::new();
+        let mut res = Vec::new();
         let mut i = array;
         while !i.is_empty() {
             let (j, parsed_value) = ParsedValues::try_parse(i)?;
@@ -134,11 +128,23 @@ mod tests {
     fn test_null_element_in_array() {
         let s = b"*3\r\n$5\r\nhello\r\n$-1\r\n$5\r\nworld\r\n";
         let (rem, res) = Array::try_parse(s.as_ref()).unwrap();
-        
+
         assert_eq!(rem, b"");
         assert_eq!(res.len(), 3);
         assert_eq!(res[0], ParsedValues::BulkString(BulkString::from("hello")));
         assert_eq!(res[1], ParsedValues::NullBulkString(NullBulkString));
         assert_eq!(res[2], ParsedValues::BulkString(BulkString::from("world")));
     }
+    
+    #[test]
+    fn test_llen_command() {
+        let s = b"*2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n";
+        let (rem, res) = Array::try_parse(s.as_ref()).unwrap();
+        
+        assert_eq!(rem, b"");
+        assert_eq!(res.len(), 2);
+        assert_eq!(res[0], ParsedValues::BulkString(BulkString::from("LLEN")));
+        assert_eq!(res[1], ParsedValues::BulkString(BulkString::from("mylist")));
+    }
+
 }

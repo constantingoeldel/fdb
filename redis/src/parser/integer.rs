@@ -1,6 +1,3 @@
-use std::convert::TryFrom;
-use std::ops::Deref;
-
 use nom::{error, Finish};
 use nom::branch::alt;
 use nom::bytes::complete::is_not;
@@ -10,17 +7,35 @@ use nom::Err::Error;
 use nom::error::{ErrorKind, FromExternalError};
 use nom::IResult;
 use nom::sequence::{delimited, tuple};
+use serde::Deserialize;
 
 use crate::parser::terminator::terminator;
 use crate::parser::TryParse;
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Hash, Deserialize)]
 pub(super) struct Integer(i64);
+
+impl Into<i64> for Integer {
+    fn into(self) -> i64 {
+        self.0
+    }
+}
 
 impl From<i64> for Integer {
     fn from(i: i64) -> Self {
         Integer(i)
     }
+}
+
+
+pub(super) fn sign<'a>(i: &'a [u8]) -> IResult<&[u8], i64> {
+    map_res(alt((char('-'), char('+'))), |s| {
+        Ok::<i64, error::Error<&'a [u8]>>(match s {
+            '-' => -1,
+            '+' => 1,
+            _ => unreachable!()
+        })
+    })(i)
 }
 
 pub fn integer(i: &[u8]) -> IResult<&[u8], &[u8]> {
@@ -44,15 +59,6 @@ impl<'a> TryParse<'a> for Integer {
     fn try_parse(value: &'a [u8]) -> Result<(&'a [u8], Self::Output), nom::error::Error<&'a [u8]>> {
         let (i, num) = integer(value).finish()?;
 
-        fn sign<'a>(i: &'a [u8]) -> IResult<&[u8], i64> {
-            map_res(alt((char('-'), char('+'))), |s| {
-                Ok::<i64, error::Error<&'a [u8]>>(match s {
-                    '-' => -1,
-                    '+' => 1,
-                    _ => unreachable!()
-                })
-            })(i)
-        }
 
         let (j, (sign, digits)) = tuple((opt(sign), parse_digits))(num).finish()?;
 
