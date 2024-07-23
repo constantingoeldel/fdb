@@ -4,7 +4,7 @@ use nom::bytes::complete::is_not;
 use nom::character::complete::{char, u128};
 use nom::sequence::delimited;
 use serde::{de, Deserialize};
-use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
+use serde::de::{DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor};
 
 use crate::parser::protocol::{null, string};
 use crate::parser::protocol::double::Double;
@@ -392,7 +392,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_enum<V>(self, name: &'static str, variants: &'static [&'static str], visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        unimplemented!()
+        dbg!(name, variants);
+        visitor.visit_enum(Enum::new(self))
     }
 
     fn deserialize_identifier<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
@@ -402,6 +403,49 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     fn deserialize_ignored_any<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
         // use normal any
         unimplemented!()
+    }
+}
+
+
+struct Enum<'a, 'de> {
+    de: &'a mut Deserializer<'de>,
+}
+
+impl<'a, 'de> Enum<'a, 'de> {
+    fn new(de: &'a mut Deserializer<'de>) -> Self {
+        Enum { de }
+    }
+}
+
+impl<'de, 'a> EnumAccess<'de> for Enum<'a, 'de> {
+    type Error = Error;
+    type Variant = Self;
+
+    fn variant_seed<V>(self, seed: V) -> std::result::Result<(V::Value, Self), Self::Error> where V: DeserializeSeed<'de> {
+        dbg!("hello");
+        dbg!(std::str::from_utf8(self.de.input).unwrap());
+        let variant = seed.deserialize(&mut *self.de)?;
+        Ok((variant, self))
+    }
+}
+
+impl<'de, 'a> VariantAccess<'de> for Enum<'a, 'de> {
+    type Error = Error;
+
+    fn unit_variant(self) -> std::result::Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn newtype_variant_seed<T>(self, seed: T) -> std::result::Result<T::Value, Self::Error> where T: DeserializeSeed<'de> {
+        seed.deserialize(&mut *self.de)
+    }
+
+    fn tuple_variant<V>(self, len: usize, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
+       visitor.visit_seq(Slice::new(self.de, len))
+    }
+
+    fn struct_variant<V>(self, fields: &'static [&'static str], visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
+        visitor.visit_seq(Slice::new(self.de, fields.len()))
     }
 }
 

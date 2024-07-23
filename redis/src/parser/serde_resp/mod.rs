@@ -376,4 +376,140 @@ mod test {
         assert_eq!(res.key, "hello");
         assert_eq!(res.value, "world");
     }
+
+    #[test]
+    fn test_unit_enum() {
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        enum TestEnum {
+            Hello,
+            Get,
+        }
+
+        let s = b"$5\r\nHello\r\n";
+        let res: TestEnum = from_slice(s).unwrap();
+        assert_eq!(res, TestEnum::Hello);
+
+        let s = b"$3\r\nGet\r\n";
+        let res: TestEnum = from_slice(s).unwrap();
+        assert_eq!(res, TestEnum::Get);
+    }
+
+    #[test]
+    fn test_unit_enum_renamed() {
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        #[serde(rename_all = "lowercase")]
+        enum TestEnum {
+            Hello,
+            Get,
+        }
+
+        let s = b"$5\r\nhello\r\n";
+        let res: TestEnum = from_slice(s).unwrap();
+
+        assert_eq!(res, TestEnum::Hello);
+
+        let s = b"$3\r\nget\r\n";
+        let res: TestEnum = from_slice(s).unwrap();
+        assert_eq!(res, TestEnum::Get);
+
+        let s = b"$3\r\nGET\r\n";
+        let res: Result<TestEnum> = from_slice(s);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_unit_enum_all_spellings() {
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        enum TestEnum {
+            #[serde(alias = "HELLO")]
+            #[serde(alias = "hello")]
+            Hello,
+            Get,
+        }
+
+        let a = b"$5\r\nhello\r\n";
+        let b = b"$5\r\nHELLO\r\n";
+        let c = b"$5\r\nHello\r\n";
+
+        let res: TestEnum = from_slice(a).unwrap();
+        assert_eq!(res, TestEnum::Hello);
+
+        let res: TestEnum = from_slice(b).unwrap();
+        assert_eq!(res, TestEnum::Hello);
+
+        let res: TestEnum = from_slice(c).unwrap();
+        assert_eq!(res, TestEnum::Hello);
+    }
+
+    #[test]
+    fn test_wrapper_enum() {
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        enum TestEnum {
+            Hello(String),
+            Get(String),
+        }
+
+        let s = b"$5\r\nHello\r\n$5\r\nworld\r\n";
+        let res: TestEnum = from_slice(s).unwrap();
+        assert_eq!(res, TestEnum::Hello("world".to_string()));
+
+        let s = b"$3\r\nGet\r\n$3\r\nout\r\n";
+        let res: TestEnum = from_slice(s).unwrap();
+        assert_eq!(res, TestEnum::Get("out".to_string()));
+    }
+
+    #[test]
+    fn test_different_wrapper_enum() {
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        enum TestEnum {
+            Hello(String),
+            Get(i64),
+        }
+        
+        let s = b"$5\r\nHello\r\n$5\r\nworld\r\n";
+        let res: TestEnum = from_slice(s).unwrap();
+        assert_eq!(res, TestEnum::Hello("world".to_string()));
+        
+        let s = b"$3\r\nGet\r\n:123\r\n";
+        let res: TestEnum = from_slice(s).unwrap();
+        assert_eq!(res, TestEnum::Get(123));
+        
+    }
+
+
+    #[test]
+    fn test_tuple_enum() {
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        enum TestEnum {
+            Hello(String, String),
+            Get(String, String),
+        }
+
+        let s = b"$5\r\nHello\r\n$5\r\nHello\r\n$5\r\nworld\r\n";
+        let res: TestEnum = from_slice(s).unwrap();
+        assert_eq!(res, TestEnum::Hello("Hello".to_string(), "world".to_string()));
+
+
+        let s = b"$3\r\nGet\r\n$3\r\nout\r\n$3\r\nnow\r\n";
+        let res: TestEnum = from_slice(s).unwrap();
+        assert_eq!(res, TestEnum::Get("out".to_string(), "now".to_string()));
+    }
+    
+    #[test]
+    fn test_struct_enum() {
+        
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        enum TestEnum {
+            Hello { key: String, value: String },
+            Get { key: String, value: String },
+        }
+
+        let s = b"$5\r\nHello\r\n$5\r\nHello\r\n$5\r\nworld\r\n";
+        let res: TestEnum = from_slice(s).unwrap();
+        assert_eq!(res, TestEnum::Hello { key: "Hello".to_string(), value: "world".to_string() });
+
+        let s = b"$3\r\nGet\r\n$3\r\nout\r\n$3\r\nnow\r\n";
+        let res: TestEnum = from_slice(s).unwrap();
+        assert_eq!(res, TestEnum::Get { key: "out".to_string(), value: "now".to_string() });
+    }
 }
