@@ -2,16 +2,23 @@ use nom::{Finish, IResult};
 use nom::bytes::complete::is_not;
 use nom::character::complete::char;
 use nom::sequence::delimited;
+use serde::{Deserialize, Serialize};
 
-use crate::parser::terminator::terminator;
-use crate::parser::TryParse;
+use crate::parser::protocol::terminator::terminator;
+use crate::parser::protocol::TryParse;
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub(super) struct SimpleString(String);
 
 impl From<&str> for SimpleString {
     fn from(s: &str) -> Self {
         SimpleString(s.to_string())
+    }
+}
+
+impl Into<String> for SimpleString {
+    fn into(self) -> String {
+        self.0
     }
 }
 

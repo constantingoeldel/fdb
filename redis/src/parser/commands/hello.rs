@@ -5,6 +5,7 @@ use nom::sequence::tuple;
 use serde::{Deserialize, Serialize};
 
 use crate::parser::protocol::{integer, string, TryParse};
+use crate::parser::protocol::integer::Integer;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Hello {
@@ -40,7 +41,7 @@ impl<'a> TryParse<'a> for Hello {
 }
 
 
-fn client_handshake(i: &[u8]) -> IResult<&[u8], ClientHandshake> {
+fn client_handshake(i: &[u8]) -> IResult<&[u8], Hello> {
     fn hello(i: &[u8]) -> IResult<&[u8], &[u8]> {
         let (i, str) = (string)(i)?;
         let (j, cmd) = tag("HELLO")(str)?;
@@ -79,7 +80,7 @@ fn client_handshake(i: &[u8]) -> IResult<&[u8], ClientHandshake> {
         let (i, (_, client)) = tuple((setname, string))(i)?;
 
         Ok((i, SetClientName {
-            name: String::from_utf8(Vec::from(client)).unwrap(),
+            clientname: String::from_utf8(Vec::from(client)).unwrap(),
         }))
     }
 
@@ -107,7 +108,7 @@ fn client_handshake(i: &[u8]) -> IResult<&[u8], ClientHandshake> {
         }
     }
 
-    let handshake = ClientHandshake {
+    let handshake = Hello {
         options: Some(ch),
     };
 

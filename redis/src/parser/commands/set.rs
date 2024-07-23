@@ -17,7 +17,7 @@
 /// EXAT timestamp-seconds -- Set the specified Unix time at which the key will expire, in seconds (a positive integer).
 ///
 /// KEEPTTL -- Retain the time to live associated with the key.
-struct Set {
+pub struct Set {
     key: String,
     value: String,
     existence_options: Option<NXorXX>,

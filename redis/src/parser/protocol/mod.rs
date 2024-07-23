@@ -1,9 +1,12 @@
 use nom::{error, IResult};
 use nom::branch::alt;
+use nom::error::Error;
+use nom::error::ErrorKind;
+use serde::{Deserialize, Serialize};
 
 pub use integer::integer;
 
-use crate::parser::protocol::array::Array;
+use crate::parser::protocol::array::{Array, array};
 use crate::parser::protocol::big_number::BigNumber;
 use crate::parser::protocol::boolean::Boolean;
 use crate::parser::protocol::bulk_error::BulkError;
@@ -13,12 +16,12 @@ use crate::parser::protocol::integer::Integer;
 use crate::parser::protocol::map::Map;
 use crate::parser::protocol::null::Null;
 use crate::parser::protocol::null_array::NullArray;
-use crate::parser::protocol::null_bulk_string::NullBulkString;
+use crate::parser::protocol::null_bulk_string::{null_bulk_string, NullBulkString};
 use crate::parser::protocol::push::Push;
 use crate::parser::protocol::set::Set;
-use crate::parser::protocol::simple_error::SimpleError;
+use crate::parser::protocol::simple_error::{simple_error, SimpleError};
 use crate::parser::protocol::simple_string::{simple_string, SimpleString};
-use crate::parser::protocol::terminator::Terminator;
+use crate::parser::protocol::terminator::{Terminator, terminator};
 use crate::parser::protocol::verbatim_string::{verbatim_string, VerbatimString};
 
 pub mod integer;
@@ -64,8 +67,7 @@ pub trait TryParse<'a> {
     fn try_parse(value: &'a [u8]) -> Result<(&'a [u8], Self::Output), error::Error<&'a [u8]>>;
 }
 
-
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Hash, Deserialize)]
 pub enum ParsedValues {
     Integer(Integer),
     SimpleString(SimpleString),
@@ -84,6 +86,7 @@ pub enum ParsedValues {
     Push(Push),
     Set(Set),
     VerbatimString(VerbatimString),
+    String(String)
 }
 
 fn parsed_value(i: &[u8]) -> IResult<&[u8], &[u8]> {

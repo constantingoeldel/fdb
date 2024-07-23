@@ -1,4 +1,4 @@
-struct Get {
+pub struct Get {
     key: String,
 }
 
@@ -13,4 +13,3 @@ macro_rules! cmd {
     };
 }
 
-cmd!("GET");

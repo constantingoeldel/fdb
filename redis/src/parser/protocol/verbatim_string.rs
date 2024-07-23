@@ -3,13 +3,24 @@ use nom::bytes::complete::{is_not, take};
 use nom::character::complete::char;
 use nom::Err::Error;
 use nom::sequence::{delimited, terminated};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+use crate::parser::protocol::integer::parse_digits;
+use crate::parser::protocol::terminator::terminator;
+use crate::parser::protocol::TryParse;
+
+#[derive(Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub(super) struct VerbatimString(String);
 
 impl From<&str> for VerbatimString {
     fn from(s: &str) -> Self {
         VerbatimString(s.to_string())
+    }
+}
+
+impl Into<String> for VerbatimString {
+    fn into(self) -> String {
+        self.0
     }
 }
 

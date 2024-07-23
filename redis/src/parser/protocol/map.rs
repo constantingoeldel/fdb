@@ -1,20 +1,32 @@
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::ops::Deref;
 
 use nom::{Finish, IResult};
 use nom::bytes::complete::is_not;
 use nom::character::complete::char;
 use nom::sequence::delimited;
-use crate::parser::protocol::ParsedValues;
+use serde::Deserialize;
 
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub(super) struct Map(HashMap<ParsedValues, ParsedValues>);
+use crate::parser::protocol::{parsed_value, ParsedValues, TryParse};
+use crate::parser::protocol::integer::{Integer, parse_digits};
+use crate::parser::protocol::simple_string::SimpleString;
+use crate::parser::protocol::terminator::terminator;
+
+#[derive(Debug, Eq, PartialEq, Deserialize)]
+pub struct Map(pub HashMap<ParsedValues, ParsedValues>);
 
 impl Deref for Map {
     type Target = HashMap<ParsedValues, ParsedValues>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl Hash for Map {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        todo!()
     }
 }
 

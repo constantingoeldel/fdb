@@ -1,3 +1,5 @@
+use std::hash::{Hash, Hasher};
+
 use nom::{AsChar, Finish};
 use nom::branch::alt;
 use nom::bytes::complete::{is_not, tag, take_till};
@@ -5,11 +7,13 @@ use nom::character::complete::char;
 use nom::combinator::opt;
 use nom::IResult;
 use nom::sequence::{delimited, tuple};
+use serde::{Deserialize, Serialize};
+
 use crate::parser::protocol::integer::{parse_digits, sign};
 use crate::parser::protocol::terminator::terminator;
 use crate::parser::protocol::TryParse;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Double(f64);
 
 impl From<f64> for Double {
@@ -18,9 +22,30 @@ impl From<f64> for Double {
     }
 }
 
+impl Into<f64> for Double {
+    fn into(self) -> f64 {
+        self.0
+    }
+}
+
+impl Into<f32> for Double {
+    fn into(self) -> f32 {
+        self.0 as f32
+    }
+}
+
 pub fn double(i: &[u8]) -> IResult<&[u8], &[u8]> {
     delimited(char(','), is_not("\r\n"), terminator)(i)
 }
+
+
+impl Hash for Double {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        todo!()
+    }
+}
+
+impl Eq for Double {}
 
 impl<'a> TryParse<'a> for Double {
     type Output = Self;

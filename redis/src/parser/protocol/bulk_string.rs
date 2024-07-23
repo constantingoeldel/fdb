@@ -3,21 +3,28 @@ use nom::bytes::complete::{is_not, take};
 use nom::character::complete::char;
 use nom::Err::Error;
 use nom::sequence::{delimited, terminated};
+use serde::{Deserialize, Serialize};
 
-use crate::parser::integer::parse_digits;
-use crate::parser::terminator::terminator;
-use crate::parser::TryParse;
+use crate::parser::protocol::integer::parse_digits;
+use crate::parser::protocol::terminator::terminator;
+use crate::parser::protocol::TryParse;
 
 /// A bulk string represents a single binary string. The string can be of any size, but by default,
 /// Redis limits it to 512 MB (see the proto-max-bulk-len configuration directive).
 ///
 /// TODO: Implement the variable limit
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub(super) struct BulkString(String);
 
 impl From<&str> for BulkString {
     fn from(s: &str) -> Self {
         BulkString(s.to_string())
+    }
+}
+
+impl Into<String> for BulkString {
+    fn into(self) -> String {
+        self.0
     }
 }
 

@@ -2,10 +2,11 @@ use std::convert::TryFrom;
 
 use nom::{Finish, IResult};
 use nom::bytes::complete::tag;
+use serde::{Deserialize, Serialize};
 
-use crate::parser::TryParse;
+use crate::parser::protocol::TryParse;
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub(super) struct Terminator;
 
 pub fn terminator(i: &[u8]) -> IResult<&[u8], &[u8]> {

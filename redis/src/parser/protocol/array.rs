@@ -4,12 +4,14 @@ use nom::{Finish, IResult};
 use nom::bytes::complete::is_not;
 use nom::character::complete::char;
 use nom::sequence::delimited;
+use serde::{Deserialize, Serialize};
 
-use crate::parser::{parsed_value, ParsedValues, TryParse};
-use crate::parser::terminator::terminator;
+use crate::parser::protocol::{parsed_value, ParsedValues, TryParse};
+use crate::parser::protocol::terminator::terminator;
 
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub(super) struct Array(Vec<ParsedValues>);
+#[derive(Debug, Eq, PartialEq, Hash, Deserialize)]
+// TODO: make not pub
+pub struct Array(pub Vec<ParsedValues>);
 
 impl Deref for Array {
     type Target = Vec<ParsedValues>;
@@ -56,11 +58,11 @@ impl<'a> TryParse<'a> for Array {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::bulk_string::BulkString;
-    use crate::parser::integer::Integer;
-    use crate::parser::null_bulk_string::NullBulkString;
-    use crate::parser::simple_error::SimpleError;
-    use crate::parser::simple_string::SimpleString;
+    use crate::parser::protocol::bulk_string::BulkString;
+    use crate::parser::protocol::integer::Integer;
+    use crate::parser::protocol::null_bulk_string::NullBulkString;
+    use crate::parser::protocol::simple_error::SimpleError;
+    use crate::parser::protocol::simple_string::SimpleString;
 
     use super::*;
     use super::ParsedValues;
@@ -135,12 +137,12 @@ mod tests {
         assert_eq!(res[1], ParsedValues::NullBulkString(NullBulkString));
         assert_eq!(res[2], ParsedValues::BulkString(BulkString::from("world")));
     }
-    
+
     #[test]
     fn test_llen_command() {
         let s = b"*2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n";
         let (rem, res) = Array::try_parse(s.as_ref()).unwrap();
-        
+
         assert_eq!(rem, b"");
         assert_eq!(res.len(), 2);
         assert_eq!(res[0], ParsedValues::BulkString(BulkString::from("LLEN")));

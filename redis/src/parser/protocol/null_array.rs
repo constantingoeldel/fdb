@@ -1,9 +1,10 @@
+use nom::{Finish, IResult};
 use nom::bytes::complete::tag;
-use nom::{IResult, Finish};
+use serde::{Deserialize, Serialize};
 
-use crate::parser::TryParse;
+use crate::parser::protocol::TryParse;
 
-#[derive(Eq, Debug, PartialEq, Hash)]
+#[derive(Eq, Debug, PartialEq, Hash, Deserialize, Serialize)]
 pub struct NullArray;
 
 pub fn null_array(i: &[u8]) -> IResult<&[u8], &[u8]> {

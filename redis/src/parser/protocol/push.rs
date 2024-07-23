@@ -4,14 +4,15 @@ use nom::{Finish, IResult};
 use nom::bytes::complete::is_not;
 use nom::character::complete::char;
 use nom::sequence::delimited;
+use serde::Deserialize;
 
-use crate::parser::{parsed_value, ParsedValues, TryParse};
-use crate::parser::integer::parse_digits;
-use crate::parser::simple_string::SimpleString;
-use crate::parser::terminator::terminator;
+use crate::parser::protocol::{parsed_value, ParsedValues, TryParse};
+use crate::parser::protocol::integer::parse_digits;
+use crate::parser::protocol::simple_string::SimpleString;
+use crate::parser::protocol::terminator::terminator;
 
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub(super) struct Push(Vec<ParsedValues>);
+#[derive(Debug, Eq, PartialEq, Hash, Deserialize)]
+pub struct Push(pub Vec<ParsedValues>);
 
 impl Deref for Push {
     type Target = Vec<ParsedValues>;

@@ -3,14 +3,21 @@ use nom::bytes::complete::{is_not, take};
 use nom::character::complete::char;
 use nom::Err::Error;
 use nom::sequence::{delimited, terminated};
+use serde::{Deserialize, Serialize};
 
-use crate::parser::integer::parse_digits;
-use crate::parser::terminator::terminator;
-use crate::parser::TryParse;
+use crate::parser::protocol::integer::parse_digits;
+use crate::parser::protocol::terminator::terminator;
+use crate::parser::protocol::TryParse;
 
 // TODO: Variable Size limit? See Bulk String
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub(super) struct BulkError(String);
+
+impl Into<String> for BulkError {
+    fn into(self) -> String {
+        self.0
+    }
+}
 
 impl From<&str> for BulkError {
     fn from(s: &str) -> Self {

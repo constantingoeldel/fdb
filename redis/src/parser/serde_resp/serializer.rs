@@ -1,6 +1,3 @@
-use serde::ser;
-
-use super::Error;
 use super::Result;
 
 pub struct Serializer {
@@ -10,7 +7,7 @@ pub struct Serializer {
 impl Serializer {
     fn to_bytes<T>(value: &T) -> Result<Vec<u8>> {
         let mut serializer = Serializer { output: Vec::new() };
-        value.serialize(&mut serializer)?;
+        // value.serialize(&mut serializer)?;
         Ok(serializer.output)
     }
 
@@ -27,11 +24,11 @@ impl Serializer {
         writer.write_all(&bytes)
     }
 }
-
-impl<'a> ser::Serializer for &'a mut Serializer {
-    type Ok = ();
-    type Error = Error;
-
-    
-
-}
+//
+// impl<'a> ser::Serializer for &'a mut Serializer {
+//     type Ok = ();
+//     type Error = Error;
+//
+//
+//
+// }

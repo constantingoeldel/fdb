@@ -2,11 +2,12 @@ use nom::{Finish, IResult};
 use nom::bytes::complete::is_not;
 use nom::character::complete::char;
 use nom::sequence::delimited;
+use serde::{Deserialize, Serialize};
 
-use crate::parser::terminator::terminator;
-use crate::parser::TryParse;
+use crate::parser::protocol::terminator::terminator;
+use crate::parser::protocol::TryParse;
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub(super) struct SimpleError(String);
 
 impl From<&str> for SimpleError {
@@ -14,6 +15,13 @@ impl From<&str> for SimpleError {
         SimpleError(s.to_string())
     }
 }
+
+impl Into<String> for SimpleError {
+    fn into(self) -> String {
+        self.0
+    }
+}
+
 
 pub fn simple_error(i: &[u8]) -> IResult<&[u8], &[u8]> {
     delimited(char('-'), is_not("\r\n"), terminator)(i)

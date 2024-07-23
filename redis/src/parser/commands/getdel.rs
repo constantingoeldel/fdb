@@ -1,4 +1,3 @@
-
-struct GetDel {
+pub struct GetDel {
     key: String,
 }

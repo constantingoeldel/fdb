@@ -1,14 +1,26 @@
 use std::collections::HashSet;
+use std::hash::Hash;
 use std::ops::Deref;
 
 use nom::{Finish, IResult};
 use nom::bytes::complete::is_not;
 use nom::character::complete::char;
 use nom::sequence::delimited;
+use serde::Deserialize;
 
+use crate::parser::protocol::{parsed_value, ParsedValues, TryParse};
+use crate::parser::protocol::integer::parse_digits;
+use crate::parser::protocol::simple_string::SimpleString;
+use crate::parser::protocol::terminator::terminator;
 
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub(super) struct Set(HashSet<ParsedValues>);
+#[derive(Debug, Eq, PartialEq, Deserialize)]
+pub struct Set(pub HashSet<ParsedValues>);
+
+impl Hash for Set {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        todo!()
+    }
+}
 
 impl Deref for Set {
     type Target = HashSet<ParsedValues>;
