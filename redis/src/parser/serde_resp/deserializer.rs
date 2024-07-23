@@ -1,4 +1,5 @@
 use nom::{AsBytes, Finish};
+use nom::branch::alt;
 use nom::bytes::complete::is_not;
 use nom::character::complete::char;
 use nom::sequence::delimited;
@@ -364,10 +365,14 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        dbg!("Sequencing");
-        let (i, len) = delimited(char('*'), is_not("\r\n"), terminator)(self.input).finish()?;
+        let array = char('*');
+        let set = char('~');
+        let push = char('>');
+
+        let (i, len) = delimited(alt((array, set, push)), is_not("\r\n"), terminator)(self.input).finish()?;
         let len = std::str::from_utf8(len).unwrap().parse::<usize>().unwrap();
         self.input = i;
+
 
         let slice = Slice::new(self, len);
         visitor.visit_seq(slice)

@@ -69,6 +69,7 @@ impl ser::Error for Error {
 #[cfg(test)]
 mod test {
     use std::collections::HashSet;
+
     use serde::Deserialize;
 
     use deserializer::from_slice;
@@ -163,7 +164,7 @@ mod test {
         let res: Test = from_slice(s).unwrap();
         assert_eq!(res.0, vec!["hello", "world"]);
     }
-    
+
     #[test]
     fn integer_array() {
         #[derive(Deserialize)]
@@ -176,6 +177,21 @@ mod test {
     }
     
     #[test]
+    fn nested_array() {
+        
+        #[derive(Deserialize)]
+        struct Test(Vec<Vec<i64>>);
+        
+        let s = b"*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n:4\r\n:5\r\n";
+        
+        let res: Test = from_slice(s).unwrap();
+        assert_eq!(res.0, vec![vec![1, 2, 3], vec![4, 5]]);
+        
+    }
+    
+    
+
+    #[test]
     fn bulk_string_array() {
         #[derive(Deserialize)]
         struct Test(Vec<String>);
@@ -185,16 +201,43 @@ mod test {
         let res: Test = from_slice(s).unwrap();
         assert_eq!(res.0, vec!["foobar", "baz"]);
     }
-    
+
     #[test]
-    fn integer_set() {
+    fn string_set() {
         #[derive(Deserialize)]
-        struct Test(HashSet<i64>);
+        struct Test(HashSet<String>);
 
         let s = b"~2\r\n+first\r\n+second\r\n";
 
         let res: Test = from_slice(s).unwrap();
-        assert_eq!(res.0, vec![1, 2, 3].into_iter().collect());
+        assert!(res.0.contains("first"));
+        assert!(res.0.contains("second"));
+        assert!(!res.0.contains("third"));
+    }
+    
+    #[test]
+    fn integer_set() {
+        
+        #[derive(Deserialize)]
+        struct Test(HashSet<i64>);
+        
+        let s = b"~2\r\n:1\r\n:2\r\n";
+        
+        let res: Test = from_slice(s).unwrap();
+        assert!(res.0.contains(&1));
+        assert!(res.0.contains(&2));
+        assert!(!res.0.contains(&3));
+    }
+    
+    #[test]
+    fn string_push() {
+        #[derive(Deserialize)]
+        struct Test(Vec<String>);
+        
+        let s = b">2\r\n+first\r\n+second\r\n";
+        
+        let res: Test = from_slice(s).unwrap();
+        assert_eq!(res.0, vec!["first", "second"]);
     }
 
 
