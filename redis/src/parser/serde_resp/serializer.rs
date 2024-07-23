@@ -16,12 +16,14 @@ impl Serializer {
         Ok(String::from_utf8(bytes)?)
     }
 
-    fn to_writer<T, W>(value: &T, mut writer: W) -> std::io::Result<()>
+    fn to_writer<T, W>(value: &T, mut writer: W) -> Result<()>
         where
             W: std::io::Write,
     {
         let bytes = Self::to_bytes(value)?;
-        writer.write_all(&bytes)
+        writer.write_all(&bytes)?;
+
+        Ok(())
     }
 }
 //

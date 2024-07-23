@@ -1,12 +1,10 @@
-use std::ffi::{c_void, CStr};
+use std::ffi::CStr;
 use std::future::Future;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
 use std::os::raw::c_char;
 use std::pin::Pin;
 use std::ptr;
-use std::sync::Arc;
-use std::task::{Context, Poll, RawWaker, Waker};
+use std::task::{Context, Poll, Waker};
 
 use log::error;
 

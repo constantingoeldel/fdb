@@ -1,8 +1,5 @@
 use std::ops::{Deref, DerefMut};
 
-
-use crate::future::from_raw_fdb_slice;
-
 pub struct Key(Vec<u8>);
 
 impl Deref for Key {

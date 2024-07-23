@@ -1,18 +1,17 @@
-use nom::AsBytes;
-use num_bigint::BigInt;
+use nom::{AsBytes, Finish};
+use nom::branch::alt;
 use serde::{de, Deserialize};
 use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
 
-use crate::parser::protocol::{ParsedValues, string};
-use crate::parser::protocol::array::Array;
+use crate::parser::protocol::array::array;
 use crate::parser::protocol::double::Double;
 use crate::parser::protocol::integer::Integer;
-use crate::parser::protocol::push::Push;
-use crate::parser::protocol::set::Set;
+use crate::parser::protocol::push::push;
+use crate::parser::protocol::set::set;
+use crate::parser::protocol::string;
 
 use super::{Error, Result};
 use super::super::protocol::boolean::Boolean;
-use super::super::protocol::map::Map;
 use super::super::protocol::TryParse;
 
 pub struct Deserializer<'de> {
@@ -36,7 +35,7 @@ impl<'de> Deserializer<'de> {
 
     // fn deserialize_float<T>(mut self) -> Result<T> where T: From<i64> + From<f64> {
     //     let int = self.deserialize_int();
-    // 
+    //
     //     if int.is_ok() {
     //         int
     //     } else {
@@ -90,37 +89,39 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
     fn deserialize_any<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, v) = ParsedValues::try_parse(&self.input)?;
-        self.input = i;
+        unimplemented!();
 
-        match v {
-            ParsedValues::Integer(i) => visitor.visit_i64(i.into()),
-            ParsedValues::Double(d) => visitor.visit_f64(d.into()),
-            ParsedValues::Boolean(b) => visitor.visit_bool(b.into()),
-            ParsedValues::Null(_) => visitor.visit_unit(),
-            ParsedValues::NullBulkString(_) => visitor.visit_unit(),
-            ParsedValues::Array(a) => {
-                visitor.visit_seq(a)
-            }
-
-            ParsedValues::String(s) => visitor.visit_string(s),
-            ParsedValues::VerbatimString(s) => visitor.visit_string(s.into()),
-            ParsedValues::SimpleString(s) => visitor.visit_string(s.into()),
-            ParsedValues::BulkString(s) => visitor.visit_string(s.into()),
-
-            ParsedValues::SimpleError(e) => visitor.visit_string(e.into()),
-            ParsedValues::BulkError(e) => visitor.visit_string(e.into()),
-            ParsedValues::Terminator(_) => unreachable!(),
-            ParsedValues::Map(m) => visitor.visit_map(m),
-            ParsedValues::Push(p) => visitor.visit_seq(p),
-            ParsedValues::Set(s) => visitor.visit_seq(s),
-
-            ParsedValues::BigNumber(b) => {
-                let b: BigInt = b.into();
-                visitor.visit_string(b.to_string())
-            },
-            ParsedValues::NullArray(_) => visitor.visit_unit()
-        }
+        // let (i, v) = ParsedValues::try_parse(&self.input)?;
+        // self.input = i;
+        //
+        // match v {
+        //     ParsedValues::Integer(i) => visitor.visit_i64(i.into()),
+        //     ParsedValues::Double(d) => visitor.visit_f64(d.into()),
+        //     ParsedValues::Boolean(b) => visitor.visit_bool(b.into()),
+        //     ParsedValues::Null(_) => visitor.visit_unit(),
+        //     ParsedValues::NullBulkString(_) => visitor.visit_unit(),
+        //     ParsedValues::Array(a) => {
+        //         visitor.visit_seq(a)
+        //     }
+        //
+        //     ParsedValues::String(s) => visitor.visit_string(s),
+        //     ParsedValues::VerbatimString(s) => visitor.visit_string(s.into()),
+        //     ParsedValues::SimpleString(s) => visitor.visit_string(s.into()),
+        //     ParsedValues::BulkString(s) => visitor.visit_string(s.into()),
+        //
+        //     ParsedValues::SimpleError(e) => visitor.visit_string(e.into()),
+        //     ParsedValues::BulkError(e) => visitor.visit_string(e.into()),
+        //     ParsedValues::Terminator(_) => unreachable!(),
+        //     ParsedValues::Map(m) => visitor.visit_map(m),
+        //     ParsedValues::Push(p) => visitor.visit_seq(p),
+        //     ParsedValues::Set(s) => visitor.visit_seq(s),
+        //
+        //     ParsedValues::BigNumber(b) => {
+        //         let b: BigInt = b.into();
+        //         visitor.visit_string(b.to_string())
+        //     },
+        //     ParsedValues::NullArray(_) => visitor.visit_unit()
+        // }
     }
 
     fn deserialize_bool<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
@@ -290,14 +291,35 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 
     fn deserialize_f32<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
         // f32s can be deserialized for integers or doubles
+        let int = Integer::try_parse(&self.input);
 
-        visitor.visit_f32(self.deserialize_float()?)
+        if let Ok((i, int)) = int {
+            self.input = i;
+            let int: i64 = int.into();
+            visitor.visit_f32(int as f32)
+        } else {
+            let (i, double) = Double::try_parse(&self.input)?;
+            self.input = i;
+            let float: f64 = double.into();
+            visitor.visit_f32(float as f32)
+        }
     }
 
     fn deserialize_f64<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
         // f64s can be deserialized for integers or doubles
 
-        visitor.visit_f64(self.deserialize_float()?)
+        let int = Integer::try_parse(&self.input);
+
+        if let Ok((i, int)) = int {
+            self.input = i;
+            let int: i64 = int.into();
+            visitor.visit_f64(int as f64)
+        } else {
+            let (i, double) = Double::try_parse(&self.input)?;
+            self.input = i;
+            let float: f64 = double.into();
+            visitor.visit_f64(float)
+        }
     }
 
     fn deserialize_char<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
@@ -305,7 +327,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_str<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, s) = string(&self.input)?;
+        let (i, s) = string(&self.input).finish()?;
         self.input = i;
         let str = std::str::from_utf8(s)?;
         visitor.visit_borrowed_str(str)
@@ -340,10 +362,10 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, array) = Array::try_parse(&self.input)?;
+        let (i, slice) = alt((array, set, push))(&self.input).finish()?;
         self.input = i;
 
-        visitor.visit_seq(array)
+        visitor.visit_seq(Slice(slice))
     }
 
 
@@ -372,19 +394,22 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_ignored_any<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        visitor.deserialize_any(visitor)
+        // use normal any
+        unimplemented!()
     }
 }
 
-impl<'de, 'a> SeqAccess<'de> for Array {
+struct Slice<'a>(&'a [u8]);
+
+impl<'de> SeqAccess<'de> for Slice<'de> {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> std::result::Result<Option<T::Value>, Self::Error> where T: DeserializeSeed<'de> {
         if self.0.is_empty() {
             Ok(None)
         } else {
-            let value = self.0.remove(0);
-            seed.deserialize(value.into_deserializer()).map(Some)
+            seed.deserialize(&mut Deserializer::from_slice(self.0)).map(Some)
+            // seed.deserialize(value.into_deserializer()).map(Some)
         }
     }
 
@@ -392,72 +417,72 @@ impl<'de, 'a> SeqAccess<'de> for Array {
         Some(self.0.len())
     }
 }
-
-impl<'de, 'a> SeqAccess<'de> for Push {
-    type Error = Error;
-
-    fn next_element_seed<T>(&mut self, seed: T) -> std::result::Result<Option<T::Value>, Self::Error> where T: DeserializeSeed<'de> {
-        if self.0.is_empty() {
-            Ok(None)
-        } else {
-            let value = self.0.remove(0);
-            seed.deserialize(value).map(Some)
-        }
-    }
-
-    fn size_hint(&self) -> Option<usize> {
-        Some(self.0.len())
-    }
-}
-
-
-impl<'de, 'a> SeqAccess<'de> for Set {
-    type Error = Error;
-
-    fn next_element_seed<T>(&mut self, seed: T) -> std::result::Result<Option<T::Value>, Self::Error> where T: DeserializeSeed<'de> {
-        let value = self.iter().next();
-        if let Some(value) = value {
-            Ok(Some(seed.deserialize(value).map(Some)))
-        } else {
-            Ok(None)
-        }
-    }
-
-    fn size_hint(&self) -> Option<usize> {
-        Some(self.0.len())
-    }
-}
-
-
-impl<'de, 'a> MapAccess<'de> for Map {
-    type Error = Error;
-
-    fn size_hint(&self) -> Option<usize> {
-        Some(self.0.len())
-    }
-
-
-    fn next_entry_seed<K, V>(&mut self, kseed: K, vseed: V) -> std::result::Result<Option<(K::Value, V::Value)>, Self::Error> where K: DeserializeSeed<'de>, V: DeserializeSeed<'de> {
-        let next_entry = self.iter().next();
-
-        if let Some((key, value)) = next_entry {
-            // let key = key.into_deserializer();
-            // let value = value.into_deserializer();
-
-            let key = kseed.deserialize(key)?;
-            let value = vseed.deserialize(value)?;
-
-            Ok(Some((key, value)))
-        } else {
-            Ok(None)
-        }
-    }
-
-    fn next_key_seed<K>(&mut self, seed: K) -> std::result::Result<Option<K::Value>, Self::Error> where K: DeserializeSeed<'de> {
-        todo!()
-    }
-
-    fn next_value_seed<V>(&mut self, seed: V) -> std::result::Result<V::Value, Self::Error> where V: DeserializeSeed<'de> {
-        todo!()
-    }
-}
+//
+// impl<'de, 'a> SeqAccess<'de> for Push {
+//     type Error = Error;
+//
+//     fn next_element_seed<T>(&mut self, seed: T) -> std::result::Result<Option<T::Value>, Self::Error> where T: DeserializeSeed<'de> {
+//         if self.0.is_empty() {
+//             Ok(None)
+//         } else {
+//             let value = self.0.remove(0);
+//             seed.deserialize(value).map(Some)
+//         }
+//     }
+//
+//     fn size_hint(&self) -> Option<usize> {
+//         Some(self.0.len())
+//     }
+// }
+//
+//
+// impl<'de, 'a> SeqAccess<'de> for Set {
+//     type Error = Error;
+//
+//     fn next_element_seed<T>(&mut self, seed: T) -> std::result::Result<Option<T::Value>, Self::Error> where T: DeserializeSeed<'de> {
+//         let value = self.iter().next();
+//         if let Some(value) = value {
+//             Ok(Some(seed.deserialize(value).map(Some)))
+//         } else {
+//             Ok(None)
+//         }
+//     }
+//
+//     fn size_hint(&self) -> Option<usize> {
+//         Some(self.0.len())
+//     }
+// }
+//
+//
+// impl<'de, 'a> MapAccess<'de> for Map {
+//     type Error = Error;
+//
+//     fn size_hint(&self) -> Option<usize> {
+//         Some(self.0.len())
+//     }
+//
+//
+//     fn next_entry_seed<K, V>(&mut self, kseed: K, vseed: V) -> std::result::Result<Option<(K::Value, V::Value)>, Self::Error> where K: DeserializeSeed<'de>, V: DeserializeSeed<'de> {
+//         let next_entry = self.iter().next();
+//
+//         if let Some((key, value)) = next_entry {
+//             // let key = key.into_deserializer();
+//             // let value = value.into_deserializer();
+//
+//             let key = kseed.deserialize(key)?;
+//             let value = vseed.deserialize(value)?;
+//
+//             Ok(Some((key, value)))
+//         } else {
+//             Ok(None)
+//         }
+//     }
+//
+//     fn next_key_seed<K>(&mut self, seed: K) -> std::result::Result<Option<K::Value>, Self::Error> where K: DeserializeSeed<'de> {
+//         todo!()
+//     }
+//
+//     fn next_value_seed<V>(&mut self, seed: V) -> std::result::Result<V::Value, Self::Error> where V: DeserializeSeed<'de> {
+//         todo!()
+//     }
+// }
