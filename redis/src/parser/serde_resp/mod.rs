@@ -68,6 +68,7 @@ impl ser::Error for Error {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashSet;
     use serde::Deserialize;
 
     use deserializer::from_slice;
@@ -106,6 +107,123 @@ mod test {
         let res: TestString = from_slice(s).unwrap();
         assert_eq!(res.0, "OK");
     }
+
+
+    #[test]
+    fn string_from_error() {
+        #[derive(Deserialize)]
+        struct TestString(String);
+
+        let s = b"-ERR unknown command 'foobar'\r\n";
+
+        let res: TestString = from_slice(s).unwrap();
+        assert_eq!(res.0, "ERR unknown command 'foobar'");
+    }
+
+    #[test]
+    fn string_from_bulk_string() {
+        #[derive(Deserialize)]
+        struct TestString(String);
+
+        let s = b"$6\r\nfoobar\r\n";
+
+        let res: TestString = from_slice(s).unwrap();
+        assert_eq!(res.0, "foobar");
+    }
+
+    #[test]
+    fn string_from_null_bulk_string() {
+        #[derive(Deserialize)]
+        struct TestString(());
+
+        let s = b"$-1\r\n";
+
+        let res: TestString = from_slice(s).unwrap();
+        assert_eq!(res.0, ());
+    }
+
+    #[test]
+    fn string_from_bulk_error() {
+        #[derive(Deserialize)]
+        struct TestString(String);
+
+        let s = b"!21\r\nSYNTAX invalid syntax\r\n";
+
+        let res: TestString = from_slice(s).unwrap();
+        assert_eq!(res.0, "SYNTAX invalid syntax");
+    }
+
+    #[test]
+    fn string_array() {
+        #[derive(Deserialize)]
+        struct Test(Vec<String>);
+
+        let s = b"*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n";
+
+        let res: Test = from_slice(s).unwrap();
+        assert_eq!(res.0, vec!["hello", "world"]);
+    }
     
+    #[test]
+    fn integer_array() {
+        #[derive(Deserialize)]
+        struct Test(Vec<i64>);
+
+        let s = b"*3\r\n:1\r\n:2\r\n:3\r\n";
+
+        let res: Test = from_slice(s).unwrap();
+        assert_eq!(res.0, vec![1, 2, 3]);
+    }
     
+    #[test]
+    fn bulk_string_array() {
+        #[derive(Deserialize)]
+        struct Test(Vec<String>);
+
+        let s = b"*2\r\n$6\r\nfoobar\r\n$3\r\nbaz\r\n";
+
+        let res: Test = from_slice(s).unwrap();
+        assert_eq!(res.0, vec!["foobar", "baz"]);
+    }
+    
+    #[test]
+    fn integer_set() {
+        #[derive(Deserialize)]
+        struct Test(HashSet<i64>);
+
+        let s = b"~2\r\n+first\r\n+second\r\n";
+
+        let res: Test = from_slice(s).unwrap();
+        assert_eq!(res.0, vec![1, 2, 3].into_iter().collect());
+    }
+
+
+    #[test]
+    fn boolean() {
+        #[derive(Deserialize)]
+        struct TestBool(bool);
+
+        let s = b"#t\r\n";
+
+        let res: TestBool = from_slice(s).unwrap();
+        assert_eq!(res.0, true);
+    }
+
+    // #[test]
+    // fn big_integer() {
+    //     #[derive(Deserialize)]
+    //     struct TestInt(BigNumber);
+    //
+    //     let fitting_biting = b"(13\r\n";
+    //
+    //     let res: TestInt = from_slice(fitting_biting).unwrap();
+    //
+    //     assert_eq!(res.0, BigNumber::from(BigInt::from(13)));
+    //
+    //     let oversized_bigint = b"(-3492890328409238509324850943850943825024385\r\n";
+    //
+    //     let res: Result<TestInt> = from_slice(oversized_bigint);
+    //
+    //     assert_eq!(res.is_err(), true);
+    // }
 }

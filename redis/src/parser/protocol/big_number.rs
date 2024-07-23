@@ -16,7 +16,7 @@ use crate::parser::protocol::terminator::terminator;
 use crate::parser::protocol::TryParse;
 
 #[derive(Eq, PartialEq, Debug, Hash)]
-pub(super) struct BigNumber(BigInt);
+pub struct BigNumber(BigInt);
 
 struct BigIntVisitor;
 

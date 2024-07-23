@@ -9,13 +9,13 @@ pub use integer::integer;
 use crate::parser::protocol::array::{Array, array};
 use crate::parser::protocol::big_number::BigNumber;
 use crate::parser::protocol::boolean::Boolean;
-use crate::parser::protocol::bulk_error::BulkError;
+use crate::parser::protocol::bulk_error::{bulk_error, BulkError};
 use crate::parser::protocol::bulk_string::{bulk_string, BulkString};
 use crate::parser::protocol::double::Double;
 use crate::parser::protocol::integer::Integer;
 use crate::parser::protocol::map::Map;
 use crate::parser::protocol::null::Null;
-use crate::parser::protocol::null_array::NullArray;
+use crate::parser::protocol::null_array::{null_array, NullArray};
 use crate::parser::protocol::null_bulk_string::{null_bulk_string, NullBulkString};
 use crate::parser::protocol::push::Push;
 use crate::parser::protocol::set::Set;
@@ -151,5 +151,9 @@ impl<'a> TryParse<'a> for ParsedValues {
 }
 
 pub fn string(i: &[u8]) -> IResult<&[u8], &[u8]> {
-    alt((simple_string, bulk_string, verbatim_string))(i)
+    alt((simple_string, bulk_string, verbatim_string, bulk_error, simple_error))(i)
+}
+
+pub fn null(i: &[u8]) -> IResult<&[u8], &[u8]> {
+    alt((null_bulk_string, null_array, null))(i)
 }

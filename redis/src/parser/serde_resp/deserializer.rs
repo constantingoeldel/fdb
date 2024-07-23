@@ -1,14 +1,14 @@
 use nom::{AsBytes, Finish};
-use nom::branch::alt;
+use nom::bytes::complete::is_not;
+use nom::character::complete::char;
+use nom::sequence::delimited;
 use serde::{de, Deserialize};
 use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
 
-use crate::parser::protocol::array::array;
+use crate::parser::protocol::{null, string};
 use crate::parser::protocol::double::Double;
 use crate::parser::protocol::integer::Integer;
-use crate::parser::protocol::push::push;
-use crate::parser::protocol::set::set;
-use crate::parser::protocol::string;
+use crate::parser::protocol::terminator::terminator;
 
 use super::{Error, Result};
 use super::super::protocol::boolean::Boolean;
@@ -327,7 +327,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_str<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, s) = string(&self.input).finish()?;
+        let (i, s) = string(self.input).finish()?;
         self.input = i;
         let str = std::str::from_utf8(s)?;
         visitor.visit_borrowed_str(str)
@@ -350,7 +350,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_unit<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        unimplemented!()
+        let (i, _) = null(self.input).finish()?;
+        self.input = i;
+        visitor.visit_unit()
     }
 
     fn deserialize_unit_struct<V>(self, name: &'static str, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
@@ -362,10 +364,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, slice) = alt((array, set, push))(&self.input).finish()?;
+        dbg!("Sequencing");
+        let (i, len) = delimited(char('*'), is_not("\r\n"), terminator)(self.input).finish()?;
+        let len = std::str::from_utf8(len).unwrap().parse::<usize>().unwrap();
         self.input = i;
 
-        visitor.visit_seq(Slice(slice))
+        let slice = Slice::new(self, len);
+        visitor.visit_seq(slice)
     }
 
 
@@ -399,22 +404,32 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 }
 
-struct Slice<'a>(&'a [u8]);
+struct Slice<'a, 'de> {
+    de: &'a mut Deserializer<'de>,
+    num_items: usize,
+}
 
-impl<'de> SeqAccess<'de> for Slice<'de> {
+impl<'a, 'de> Slice<'a, 'de> {
+    fn new(de: &'a mut Deserializer<'de>, num_items: usize) -> Self {
+        Slice { de, num_items }
+    }
+}
+
+impl<'a, 'de> SeqAccess<'de> for Slice<'a, 'de> {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> std::result::Result<Option<T::Value>, Self::Error> where T: DeserializeSeed<'de> {
-        if self.0.is_empty() {
-            Ok(None)
-        } else {
-            seed.deserialize(&mut Deserializer::from_slice(self.0)).map(Some)
-            // seed.deserialize(value.into_deserializer()).map(Some)
+        // If there are no more items, return None
+        if self.num_items == 0 {
+            return Ok(None);
         }
+
+        self.num_items -= 1;
+        seed.deserialize(&mut *self.de).map(Some)
     }
 
     fn size_hint(&self) -> Option<usize> {
-        Some(self.0.len())
+        Some(self.num_items)
     }
 }
 //
