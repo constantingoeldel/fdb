@@ -3,6 +3,8 @@ use std::fmt::Display;
 use serde::{de, ser};
 use thiserror::Error;
 
+pub use deserializer::from_slice;
+
 mod deserializer;
 mod serializer;
 
@@ -77,8 +79,6 @@ mod test {
     use std::collections::{HashMap, HashSet};
 
     use serde::Deserialize;
-
-    use deserializer::from_slice;
 
     use super::*;
 
@@ -557,6 +557,7 @@ mod test {
         assert_eq!(res.0, "Hello".to_string());
         assert_eq!(res.1, None);
     }
+    
 
     #[test]
     fn test_option_none_enum() {
@@ -606,13 +607,10 @@ mod test {
     //         #[serde()]
     //         b: i64,
     //     }
-    // 
+    //
     //     let s = b"*2\r\n$5\r\nHello\r\n:123\r\n";
     //     let res: Key = from_slice(s).unwrap();
     //     assert_eq!(res.a, "Hello");
     //     assert_eq!(res.b, 0);
     // }
-    
-    
-    
 }

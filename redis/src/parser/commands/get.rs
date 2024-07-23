@@ -1,15 +1,21 @@
-pub struct Get {
-    key: String,
-}
+use serde::Deserialize;
 
-macro_rules! cmd {
-    ($c:expr) => {
-        fn $c(i: &[u8]) -> IResult<&[u8], &[u8]> {
-        let (i, str) = (string)(i)?;
-        let (j, cmd) = tag($c)(str)?;
-        assert!(j.is_empty());
-        Ok((i, cmd))
-    }
-    };
+/// # GET
+///
+/// Syntax
+///
+/// GET key
+///
+/// Available since:
+///     1.0.0
+/// Time complexity:
+///     O(1)
+/// ACL categories:
+///     @read, @string, @fast
+///
+/// Get the value of key. If the key does not exist the special value nil is returned. An error is returned if the value stored at key is not a string, because GET only handles string values.
+#[derive(Deserialize, Debug, PartialEq, Eq)]
+pub struct Get {
+    pub key: String,
 }
 

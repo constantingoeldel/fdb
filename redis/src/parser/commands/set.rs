@@ -1,4 +1,4 @@
-
+use serde::Deserialize;
 
 /// SET key value [NX | XX] [GET] [EX seconds | PX milliseconds |
 /// EXAT unix-time-seconds | PXAT unix-time-milliseconds | KEEPTTL]
@@ -17,20 +17,23 @@
 /// EXAT timestamp-seconds -- Set the specified Unix time at which the key will expire, in seconds (a positive integer).
 ///
 /// KEEPTTL -- Retain the time to live associated with the key.
+#[derive(Deserialize, Debug, PartialEq, Eq)]
 pub struct Set {
-    key: String,
-    value: String,
-    existence_options: Option<NXorXX>,
-    get: Option<()>,
-    expire: Option<Expiry>
+    pub key: String,
+    pub value: String,
+    pub existence_options: Option<NXorXX>,
+    pub get: Option<()>,
+    pub expire: Option<Expiry>
 }
 
-enum NXorXX {
+#[derive(Deserialize, Debug, Eq, PartialEq)]
+pub enum NXorXX {
     NX,
     XX,
 }
 
-enum Expiry {
+#[derive(Deserialize, Debug, Eq, PartialEq)]
+pub enum Expiry {
     EX(u64),
     PX(u64),
     EXAT(u64),

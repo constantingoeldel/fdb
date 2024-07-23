@@ -94,39 +94,31 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
     fn deserialize_any<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        unimplemented!();
 
-        // let (i, v) = ParsedValues::try_parse(&self.input)?;
-        // self.input = i;
-        //
-        // match v {
-        //     ParsedValues::Integer(i) => visitor.visit_i64(i.into()),
-        //     ParsedValues::Double(d) => visitor.visit_f64(d.into()),
-        //     ParsedValues::Boolean(b) => visitor.visit_bool(b.into()),
-        //     ParsedValues::Null(_) => visitor.visit_unit(),
-        //     ParsedValues::NullBulkString(_) => visitor.visit_unit(),
-        //     ParsedValues::Array(a) => {
-        //         visitor.visit_seq(a)
-        //     }
-        //
-        //     ParsedValues::String(s) => visitor.visit_string(s),
-        //     ParsedValues::VerbatimString(s) => visitor.visit_string(s.into()),
-        //     ParsedValues::SimpleString(s) => visitor.visit_string(s.into()),
-        //     ParsedValues::BulkString(s) => visitor.visit_string(s.into()),
-        //
-        //     ParsedValues::SimpleError(e) => visitor.visit_string(e.into()),
-        //     ParsedValues::BulkError(e) => visitor.visit_string(e.into()),
-        //     ParsedValues::Terminator(_) => unreachable!(),
-        //     ParsedValues::Map(m) => visitor.visit_map(m),
-        //     ParsedValues::Push(p) => visitor.visit_seq(p),
-        //     ParsedValues::Set(s) => visitor.visit_seq(s),
-        //
-        //     ParsedValues::BigNumber(b) => {
-        //         let b: BigInt = b.into();
-        //         visitor.visit_string(b.to_string())
-        //     },
-        //     ParsedValues::NullArray(_) => visitor.visit_unit()
+        // // If the input is an array, set or push, deserialize it as a sequence
+        // let seq = alt((char(ARRAY), char(SET), char(PUSH)));
+        // if let Ok((_, _)) = delimited(seq, is_not(TERM), terminator)(self.input).finish() {
+        //     return self.deserialize_seq(visitor);
         // }
+        //
+        // // If the input is a map, deserialize it as a map
+        // if let Ok((_, _)) = delimited(char('%'), is_not(TERM), terminator)(self.input) {
+        //     return self.deserialize_map(visitor);
+        // }
+
+        let c = self.input.first().expect("At this point, the input should not be empty");
+        let c = *c as char;
+
+        match c {
+            '*' | '~' | '>' => self.deserialize_seq(visitor),
+            '%' => self.deserialize_map(visitor),
+            '+' | '-' | '$' | '(' | '!' | '=' => self.deserialize_str(visitor),
+            ':' => self.deserialize_i64(visitor),
+            '_' => self.deserialize_unit(visitor),
+            '#' => self.deserialize_bool(visitor),
+            ',' => self.deserialize_f64(visitor),
+            _ => unimplemented!("Unknown type"),
+        }
     }
 
     fn deserialize_bool<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
@@ -363,7 +355,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         let s = std::str::from_utf8(s)?;
 
 
-        if s == name {
+        if s.to_lowercase() == name.to_lowercase() {
             visitor.visit_unit()
         } else {
             Err(Error::UnitStructNameMismatch(name.to_string(), s.to_string()))

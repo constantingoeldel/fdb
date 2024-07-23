@@ -6,6 +6,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 use fdb::CreateTransaction;
+use parser::Commands;
+
+use crate::parser::ParseError;
 
 mod parser;
 
@@ -26,7 +29,15 @@ async fn main() -> Result<(), io::Error> {
         socket.read_buf(&mut buf).await?;
 
         println!("{:?}", buf);
-        let str = std::str::from_utf8(&buf).unwrap();
-        println!("{:?}", str);
+
+        let cmd: Result<Commands, ParseError> = parser::from_slice(&buf);
+        match cmd {
+            Ok(cmd) => {
+                dbg!(cmd);
+            },
+            Err(e) => {
+                dbg!(e);
+            }
+        };
     }
 }
