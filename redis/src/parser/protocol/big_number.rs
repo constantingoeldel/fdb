@@ -6,8 +6,8 @@ use nom::combinator::opt;
 use nom::Finish;
 use nom::IResult;
 use nom::sequence::delimited;
-use num_bigint::BigInt;
-use num_traits::Num;
+use num_bigint::{BigInt, ParseBigIntError};
+use num_traits::{Num, ToPrimitive};
 use serde::{Deserialize, Deserializer};
 use serde::de::{Error, Visitor};
 
@@ -17,6 +17,30 @@ use crate::parser::protocol::TryParse;
 
 #[derive(Eq, PartialEq, Debug, Hash)]
 pub struct BigNumber(BigInt);
+
+impl From<i64> for BigNumber {
+    fn from(i: i64) -> Self {
+        BigNumber(BigInt::from(i))
+    }
+}
+
+impl TryFrom<&str> for BigNumber {
+    type Error = ParseBigIntError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let num = BigInt::from_str_radix(value, 10)?;
+        Ok(BigNumber(num))
+    }
+
+}
+
+impl TryInto<i64> for BigNumber {
+    type Error = ();
+
+    fn try_into(self) -> Result<i64, Self::Error> {
+        self.0.to_i64().ok_or(())
+    }
+}
 
 struct BigIntVisitor;
 
@@ -108,12 +132,8 @@ impl<'a> TryParse<'a> for BigNumber {
     type Output = Self;
     fn try_parse(value: &'a [u8]) -> Result<(&'a [u8], Self::Output), nom::error::Error<&'a [u8]>> {
         let (i, num) = big_number(value).finish()?;
-        let (j, sign) = opt(sign)(num).finish()?;
-        let sign = sign.unwrap_or(1);
-
-        let num = std::str::from_utf8(j).unwrap();
+        let num = std::str::from_utf8(num).unwrap();
         let num = BigInt::from_str_radix(num, 10).unwrap();
-        let num = num * sign;
 
         Ok((i, BigNumber(num)))
     }

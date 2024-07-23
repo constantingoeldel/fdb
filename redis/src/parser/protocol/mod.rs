@@ -5,9 +5,10 @@ use nom::error::ErrorKind;
 use serde::{Deserialize, Serialize};
 
 pub use integer::integer;
+use crate::parser::protocol;
 
 use crate::parser::protocol::array::{Array, array};
-use crate::parser::protocol::big_number::BigNumber;
+use crate::parser::protocol::big_number::{big_number, BigNumber};
 use crate::parser::protocol::boolean::Boolean;
 use crate::parser::protocol::bulk_error::{bulk_error, BulkError};
 use crate::parser::protocol::bulk_string::{bulk_string, BulkString};
@@ -151,9 +152,9 @@ impl<'a> TryParse<'a> for ParsedValues {
 }
 
 pub fn string(i: &[u8]) -> IResult<&[u8], &[u8]> {
-    alt((simple_string, bulk_string, verbatim_string, bulk_error, simple_error))(i)
+    alt((simple_string, bulk_string, verbatim_string, bulk_error, simple_error, big_number))(i)
 }
 
 pub fn null(i: &[u8]) -> IResult<&[u8], &[u8]> {
-    alt((null_bulk_string, null_array, null))(i)
+    alt((null_bulk_string, null_array, protocol::null::null))(i)
 }

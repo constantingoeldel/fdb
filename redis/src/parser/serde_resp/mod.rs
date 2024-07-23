@@ -17,9 +17,9 @@ pub enum Error {
     #[error("Invalid encoding")]
     Parsing(nom::error::Error<Vec<u8>>),
 
-    #[error("Integer too large to fit in target type. Expected {0}, found {1}. Use a larger integer or a string type instead"
+    #[error("Integer too large to fit in target type. Expected a number between {0} and {1}, but found {2}. Use a larger integer or a string type instead"
     )]
-    IntegerOutOfRange(i128, i128),
+    IntegerOutOfRange(i128, i128, i128),
 
     #[error("There is no concept of a single character in RESP, use a string instead")]
     CharNotSupported,
@@ -68,11 +68,16 @@ impl ser::Error for Error {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
+    use nom::character::complete::digit1;
+    use nom::combinator::map_res;
+    use nom::IResult;
 
     use serde::Deserialize;
 
     use deserializer::from_slice;
+
+    use crate::parser::protocol::big_number::BigNumber;
 
     use super::*;
 
@@ -132,6 +137,18 @@ mod test {
         assert_eq!(res.0, "foobar");
     }
 
+
+    #[test]
+    fn string_from_bulk_error() {
+        #[derive(Deserialize)]
+        struct TestString(String);
+
+        let s = b"!21\r\nSYNTAX invalid syntax\r\n";
+
+        let res: TestString = from_slice(s).unwrap();
+        assert_eq!(res.0, "SYNTAX invalid syntax");
+    }
+
     #[test]
     fn string_from_null_bulk_string() {
         #[derive(Deserialize)]
@@ -144,15 +161,27 @@ mod test {
     }
 
     #[test]
-    fn string_from_bulk_error() {
+    fn string_from_null() {
         #[derive(Deserialize)]
-        struct TestString(String);
+        struct Test(());
 
-        let s = b"!21\r\nSYNTAX invalid syntax\r\n";
+        let s = b"_\r\n";
 
-        let res: TestString = from_slice(s).unwrap();
-        assert_eq!(res.0, "SYNTAX invalid syntax");
+        let res: Test = from_slice(s).unwrap();
+        assert_eq!(res.0, ());
     }
+
+    #[test]
+    fn string_from_null_array() {
+        #[derive(Deserialize)]
+        struct Test(());
+
+        let s = b"*-1\r\n";
+
+        let res: Test = from_slice(s).unwrap();
+        assert_eq!(res.0, ());
+    }
+
 
     #[test]
     fn string_array() {
@@ -175,21 +204,18 @@ mod test {
         let res: Test = from_slice(s).unwrap();
         assert_eq!(res.0, vec![1, 2, 3]);
     }
-    
+
     #[test]
     fn nested_array() {
-        
         #[derive(Deserialize)]
         struct Test(Vec<Vec<i64>>);
-        
+
         let s = b"*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n:4\r\n:5\r\n";
-        
+
         let res: Test = from_slice(s).unwrap();
         assert_eq!(res.0, vec![vec![1, 2, 3], vec![4, 5]]);
-        
     }
-    
-    
+
 
     #[test]
     fn bulk_string_array() {
@@ -214,28 +240,27 @@ mod test {
         assert!(res.0.contains("second"));
         assert!(!res.0.contains("third"));
     }
-    
+
     #[test]
     fn integer_set() {
-        
         #[derive(Deserialize)]
         struct Test(HashSet<i64>);
-        
+
         let s = b"~2\r\n:1\r\n:2\r\n";
-        
+
         let res: Test = from_slice(s).unwrap();
         assert!(res.0.contains(&1));
         assert!(res.0.contains(&2));
         assert!(!res.0.contains(&3));
     }
-    
+
     #[test]
     fn string_push() {
         #[derive(Deserialize)]
         struct Test(Vec<String>);
-        
+
         let s = b">2\r\n+first\r\n+second\r\n";
-        
+
         let res: Test = from_slice(s).unwrap();
         assert_eq!(res.0, vec!["first", "second"]);
     }
@@ -252,21 +277,92 @@ mod test {
         assert_eq!(res.0, true);
     }
 
-    // #[test]
-    // fn big_integer() {
-    //     #[derive(Deserialize)]
-    //     struct TestInt(BigNumber);
-    //
-    //     let fitting_biting = b"(13\r\n";
-    //
-    //     let res: TestInt = from_slice(fitting_biting).unwrap();
-    //
-    //     assert_eq!(res.0, BigNumber::from(BigInt::from(13)));
-    //
-    //     let oversized_bigint = b"(-3492890328409238509324850943850943825024385\r\n";
-    //
-    //     let res: Result<TestInt> = from_slice(oversized_bigint);
-    //
-    //     assert_eq!(res.is_err(), true);
-    // }
+    #[test]
+    fn map() {
+        #[derive(Deserialize)]
+        struct TestMap(HashMap<String, i64>);
+
+        let s = b"%2\r\n+first\r\n:1\r\n+second\r\n:2\r\n";
+
+        let res: TestMap = from_slice(s).unwrap();
+        assert_eq!(res.0.get("first"), Some(&1));
+        assert_eq!(res.0.get("second"), Some(&2));
+        assert_eq!(res.0.get("third"), None);
+    }
+
+    #[test]
+    fn small_int() {
+        #[derive(Deserialize)]
+        struct TestInt(i8);
+
+        let s = b":13\r\n";
+
+        let res: TestInt = from_slice(s).unwrap();
+        assert_eq!(res.0, 13);
+    }
+
+    #[test]
+    fn small_uint() {
+        #[derive(Deserialize)]
+        struct TestInt(u8);
+
+        let s = b":13\r\n";
+
+        let res: TestInt = from_slice(s).unwrap();
+        assert_eq!(res.0, 13);
+    }
+
+    #[test]
+    fn small_int_out_of_range() {
+        #[derive(Deserialize, Debug)]
+        struct TestInt(i8);
+
+        let s = b":128\r\n";
+
+        let res: Result<TestInt> = from_slice(s);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn small_uint_out_of_range() {
+        #[derive(Deserialize, Debug)]
+        struct TestInt(u8);
+
+        let s = b":-5\r\n";
+
+        let res: Result<TestInt> = from_slice(s);
+        assert!(res.is_err());
+        dbg!(res);
+    }
+
+    #[test]
+    fn big_integer() {
+        // TODO: utilize the BigInt type
+        // + better error message when overflowing the target type
+        // Currently, the error stems from parse_digits in integer.rs: 
+        //fn parse(i: &str) -> IResult<&str, i64> {
+        //    map_res(digit1, str::parse)(i)
+        // }
+        let fitting_bigint = b"(-1000\r\n";
+        let oversized_bigint = b"(-3492890328409238509324850943850943825024385\r\n";
+
+        #[derive(Deserialize, Debug)]
+        struct TestInt(i64);
+
+        let res: TestInt = from_slice(fitting_bigint).unwrap();
+        assert_eq!(res.0, -1000);
+        let res: Result<TestInt> = from_slice(oversized_bigint);
+        assert!(res.is_err());
+        
+        #[derive(Deserialize)]
+        struct TestString(String);
+
+        let res: TestString = from_slice(fitting_bigint) .unwrap();
+        assert_eq!(res.0, "-1000");
+        let res: TestString = from_slice(oversized_bigint).unwrap();
+        assert_eq!("-3492890328409238509324850943850943825024385", res.0);
+    }
+    
+    
+    
 }

@@ -8,6 +8,7 @@ use nom::error::{ErrorKind, FromExternalError};
 use nom::IResult;
 use nom::sequence::{delimited, tuple};
 use serde::Deserialize;
+use crate::parser::protocol::big_number::big_number;
 
 use crate::parser::protocol::terminator::terminator;
 use crate::parser::protocol::TryParse;
@@ -57,8 +58,7 @@ pub fn parse_digits(i: &[u8]) -> IResult<&[u8], i64> {
 impl<'a> TryParse<'a> for Integer {
     type Output = Self;
     fn try_parse(value: &'a [u8]) -> Result<(&'a [u8], Self::Output), nom::error::Error<&'a [u8]>> {
-        let (i, num) = integer(value).finish()?;
-
+        let (i, num) = alt((integer, big_number))(value).finish()?;
 
         let (j, (sign, digits)) = tuple((opt(sign), parse_digits))(num).finish()?;
 

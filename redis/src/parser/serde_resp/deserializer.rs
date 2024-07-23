@@ -1,14 +1,14 @@
 use nom::{AsBytes, Finish};
 use nom::branch::alt;
 use nom::bytes::complete::is_not;
-use nom::character::complete::char;
+use nom::character::complete::{char, u128};
 use nom::sequence::delimited;
 use serde::{de, Deserialize};
 use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
 
 use crate::parser::protocol::{null, string};
 use crate::parser::protocol::double::Double;
-use crate::parser::protocol::integer::Integer;
+use crate::parser::protocol::integer::{Integer, parse_digits};
 use crate::parser::protocol::terminator::terminator;
 
 use super::{Error, Result};
@@ -132,13 +132,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_i8<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, int) = Integer::try_parse(&self.input.as_ref())?;
+        let (i, int) = Integer::try_parse(self.input)?;
         self.input = i;
 
         let int: i64 = int.into();
 
         if int > i8::MAX as i64 || int < i8::MIN as i64 {
-            return Err(Error::IntegerOutOfRange(int as i128, i8::MAX as i128));
+            return Err(Error::IntegerOutOfRange(i8::MIN as i128, i8::MAX as i128, int as i128));
         }
 
         let int = int as i8;
@@ -147,13 +147,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_i16<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, int) = Integer::try_parse(&self.input.as_ref())?;
+        let (i, int) = Integer::try_parse(self.input)?;
         self.input = i;
 
         let int: i64 = int.into();
 
         if int > i16::MAX as i64 || int < i16::MIN as i64 {
-            return Err(Error::IntegerOutOfRange(int as i128, i16::MAX as i128));
+            return Err(Error::IntegerOutOfRange(i16::MIN as i128, i16::MAX as i128, int as i128));
         }
 
         let int = int as i16;
@@ -163,13 +163,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_i32<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, int) = Integer::try_parse(&self.input.as_ref())?;
+        let (i, int) = Integer::try_parse(self.input)?;
         self.input = i;
 
         let int: i64 = int.into();
 
         if int > i32::MAX as i64 || int < i32::MIN as i64 {
-            return Err(Error::IntegerOutOfRange(int as i128, i32::MAX as i128));
+            return Err(Error::IntegerOutOfRange(i32::MIN as i128, i32::MAX as i128, int as i128));
         }
 
         let int = int as i32;
@@ -179,30 +179,17 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_i64<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, int) = Integer::try_parse(&self.input.as_ref())?;
+        let (i, int) = Integer::try_parse(self.input)?;
         self.input = i;
 
-        let int: i64 = int.into();
-
-        if int > i64::MAX || int < i64::MIN {
-            return Err(Error::IntegerOutOfRange(int as i128, i64::MAX as i128));
-        }
-
-        let int = int;
-
-
-        visitor.visit_i64(int)
+        visitor.visit_i64(int.into())
     }
 
     fn deserialize_i128<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, int) = Integer::try_parse(&self.input.as_ref())?;
+        let (i, int) = Integer::try_parse(self.input)?;
         self.input = i;
 
         let int: i64 = int.into();
-
-        if int > i128::MAX as i64 || int < i128::MIN as i64 {
-            return Err(Error::IntegerOutOfRange(int as i128, i128::MAX as i128));
-        }
 
         let int = int as i128;
 
@@ -211,13 +198,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_u8<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, int) = Integer::try_parse(&self.input.as_ref())?;
+        let (i, int) = Integer::try_parse(self.input)?;
         self.input = i;
 
         let int: i64 = int.into();
 
         if int > u8::MAX as i64 || int < u8::MIN as i64 {
-            return Err(Error::IntegerOutOfRange(int as i128, u8::MAX as i128));
+            return Err(Error::IntegerOutOfRange(u8::MIN as i128, u8::MAX as i128, int as i128));
         }
 
         let int = int as u8;
@@ -227,13 +214,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_u16<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, int) = Integer::try_parse(&self.input.as_ref())?;
+        let (i, int) = Integer::try_parse(self.input)?;
         self.input = i;
 
         let int: i64 = int.into();
 
         if int > u16::MAX as i64 || int < u16::MIN as i64 {
-            return Err(Error::IntegerOutOfRange(int as i128, u16::MAX as i128));
+            return Err(Error::IntegerOutOfRange(u16::MIN as i128, u16::MAX as i128, int as i128));
         }
 
         let int = int as u16;
@@ -243,13 +230,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_u32<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, int) = Integer::try_parse(&self.input.as_ref())?;
+        let (i, int) = Integer::try_parse(self.input)?;
         self.input = i;
 
         let int: i64 = int.into();
 
         if int > u32::MAX as i64 || int < u32::MIN as i64 {
-            return Err(Error::IntegerOutOfRange(int as i128, u32::MAX as i128));
+            return Err(Error::IntegerOutOfRange(u32::MIN as i128, u32::MAX as i128, int as i128));
         }
 
         let int = int as u32;
@@ -259,13 +246,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_u64<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, int) = Integer::try_parse(&self.input.as_ref())?;
+        let (i, int) = Integer::try_parse(self.input)?;
         self.input = i;
 
         let int: i64 = int.into();
 
         if int > u64::MAX as i64 || int < u64::MIN as i64 {
-            return Err(Error::IntegerOutOfRange(int as i128, u64::MAX as i128));
+            return Err(Error::IntegerOutOfRange(u64::MIN as i128, u64::MAX as i128, int as i128));
         }
 
         let int = int as u64;
@@ -275,13 +262,14 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_u128<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let (i, int) = Integer::try_parse(&self.input.as_ref())?;
+        let (i, int) = Integer::try_parse(self.input)?;
         self.input = i;
 
         let int: i64 = int.into();
 
         if int > u128::MAX as i64 || int < u128::MIN as i64 {
-            return Err(Error::IntegerOutOfRange(int as i128, u128::MAX as i128));
+            // TODO: this conversion will panic
+            return Err(Error::IntegerOutOfRange(u128::MIN as i128, u128::MAX as i128, int as i128));
         }
 
         let int = int as u128;
@@ -365,11 +353,16 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        let array = char('*');
-        let set = char('~');
-        let push = char('>');
+        const ARRAY: char = '*';
+        const SET: char = '~';
+        const PUSH: char = '>';
+        const TERM: &str = "\r\n";
 
-        let (i, len) = delimited(alt((array, set, push)), is_not("\r\n"), terminator)(self.input).finish()?;
+        let array = char(ARRAY);
+        let set = char(SET);
+        let push = char(PUSH);
+
+        let (i, len) = delimited(alt((array, set, push)), is_not(TERM), terminator)(self.input).finish()?;
         let len = std::str::from_utf8(len).unwrap().parse::<usize>().unwrap();
         self.input = i;
 
@@ -388,7 +381,12 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_map<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        unimplemented!()
+        let (i, num_entries) = delimited(char('%'), is_not("\r\n"), terminator)(self.input).finish()?;
+        let (_, num_entries) = parse_digits(num_entries).finish()?;
+        self.input = i;
+
+        let map_slice = MapSlice::new(self, num_entries as usize);
+        visitor.visit_map(map_slice)
     }
 
     fn deserialize_struct<V>(self, name: &'static str, fields: &'static [&'static str], visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
@@ -437,72 +435,35 @@ impl<'a, 'de> SeqAccess<'de> for Slice<'a, 'de> {
         Some(self.num_items)
     }
 }
-//
-// impl<'de, 'a> SeqAccess<'de> for Push {
-//     type Error = Error;
-//
-//     fn next_element_seed<T>(&mut self, seed: T) -> std::result::Result<Option<T::Value>, Self::Error> where T: DeserializeSeed<'de> {
-//         if self.0.is_empty() {
-//             Ok(None)
-//         } else {
-//             let value = self.0.remove(0);
-//             seed.deserialize(value).map(Some)
-//         }
-//     }
-//
-//     fn size_hint(&self) -> Option<usize> {
-//         Some(self.0.len())
-//     }
-// }
-//
-//
-// impl<'de, 'a> SeqAccess<'de> for Set {
-//     type Error = Error;
-//
-//     fn next_element_seed<T>(&mut self, seed: T) -> std::result::Result<Option<T::Value>, Self::Error> where T: DeserializeSeed<'de> {
-//         let value = self.iter().next();
-//         if let Some(value) = value {
-//             Ok(Some(seed.deserialize(value).map(Some)))
-//         } else {
-//             Ok(None)
-//         }
-//     }
-//
-//     fn size_hint(&self) -> Option<usize> {
-//         Some(self.0.len())
-//     }
-// }
-//
-//
-// impl<'de, 'a> MapAccess<'de> for Map {
-//     type Error = Error;
-//
-//     fn size_hint(&self) -> Option<usize> {
-//         Some(self.0.len())
-//     }
-//
-//
-//     fn next_entry_seed<K, V>(&mut self, kseed: K, vseed: V) -> std::result::Result<Option<(K::Value, V::Value)>, Self::Error> where K: DeserializeSeed<'de>, V: DeserializeSeed<'de> {
-//         let next_entry = self.iter().next();
-//
-//         if let Some((key, value)) = next_entry {
-//             // let key = key.into_deserializer();
-//             // let value = value.into_deserializer();
-//
-//             let key = kseed.deserialize(key)?;
-//             let value = vseed.deserialize(value)?;
-//
-//             Ok(Some((key, value)))
-//         } else {
-//             Ok(None)
-//         }
-//     }
-//
-//     fn next_key_seed<K>(&mut self, seed: K) -> std::result::Result<Option<K::Value>, Self::Error> where K: DeserializeSeed<'de> {
-//         todo!()
-//     }
-//
-//     fn next_value_seed<V>(&mut self, seed: V) -> std::result::Result<V::Value, Self::Error> where V: DeserializeSeed<'de> {
-//         todo!()
-//     }
-// }
+
+
+struct MapSlice<'a, 'de> {
+    de: &'a mut Deserializer<'de>,
+    num_entries: usize,
+}
+
+impl<'a, 'de> MapSlice<'a, 'de> {
+    fn new(de: &'a mut Deserializer<'de>, num_entries: usize) -> Self {
+        MapSlice { de, num_entries }
+    }
+}
+
+impl<'a, 'de> MapAccess<'de> for MapSlice<'a, 'de> {
+    type Error = Error;
+    fn next_key_seed<K>(&mut self, seed: K) -> std::result::Result<Option<K::Value>, Self::Error> where K: DeserializeSeed<'de> {
+        if self.num_entries == 0 {
+            return Ok(None);
+        }
+
+        seed.deserialize(&mut *self.de).map(Some)
+    }
+
+    fn next_value_seed<V>(&mut self, seed: V) -> std::result::Result<V::Value, Self::Error> where V: DeserializeSeed<'de> {
+        self.num_entries -= 1;
+        seed.deserialize(&mut *self.de)
+    }
+
+    fn size_hint(&self) -> Option<usize> {
+        Some(self.num_entries)
+    }
+}
