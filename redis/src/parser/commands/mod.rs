@@ -7,6 +7,7 @@ mod get;
 mod hello;
 mod set;
 mod getdel;
+mod xadd;
 
 
 enum Commands {

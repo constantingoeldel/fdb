@@ -85,6 +85,10 @@ pub fn from_str<'a, T>(s: &'a str) -> Result<T>
 //     }
 // }
 
+const ARRAY: char = '*';
+const SET: char = '~';
+const PUSH: char = '>';
+const TERM: &str = "\r\n";
 
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
@@ -353,16 +357,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        const ARRAY: char = '*';
-        const SET: char = '~';
-        const PUSH: char = '>';
-        const TERM: &str = "\r\n";
+        let seq = alt((char(ARRAY), char(SET), char(PUSH)));
 
-        let array = char(ARRAY);
-        let set = char(SET);
-        let push = char(PUSH);
-
-        let (i, len) = delimited(alt((array, set, push)), is_not(TERM), terminator)(self.input).finish()?;
+        let (i, len) = delimited(seq, is_not(TERM), terminator)(self.input).finish()?;
         let len = std::str::from_utf8(len).unwrap().parse::<usize>().unwrap();
         self.input = i;
 
@@ -390,7 +387,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_struct<V>(self, name: &'static str, fields: &'static [&'static str], visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        unimplemented!()
+        dbg!(name, fields);
+        self.deserialize_seq(visitor)
     }
 
     fn deserialize_enum<V>(self, name: &'static str, variants: &'static [&'static str], visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {

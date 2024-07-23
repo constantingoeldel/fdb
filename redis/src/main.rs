@@ -25,7 +25,8 @@ async fn main() -> Result<(), io::Error> {
         let mut buf = BytesMut::with_capacity(1024);
         socket.read_buf(&mut buf).await?;
 
-
-
+        println!("{:?}", buf);
+        let str = std::str::from_utf8(&buf).unwrap();
+        println!("{:?}", str);
     }
 }

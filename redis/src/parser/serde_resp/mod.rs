@@ -35,6 +35,9 @@ pub enum Error {
 
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
+
+    #[error("Invalid Command {0}")]
+    InvalidCommand(String),
 }
 
 impl<'a> From<nom::error::Error<&'a [u8]>> for Error {
@@ -69,15 +72,10 @@ impl ser::Error for Error {
 #[cfg(test)]
 mod test {
     use std::collections::{HashMap, HashSet};
-    use nom::character::complete::digit1;
-    use nom::combinator::map_res;
-    use nom::IResult;
 
     use serde::Deserialize;
 
     use deserializer::from_slice;
-
-    use crate::parser::protocol::big_number::BigNumber;
 
     use super::*;
 
@@ -339,7 +337,7 @@ mod test {
     fn big_integer() {
         // TODO: utilize the BigInt type
         // + better error message when overflowing the target type
-        // Currently, the error stems from parse_digits in integer.rs: 
+        // Currently, the error stems from parse_digits in integer.rs:
         //fn parse(i: &str) -> IResult<&str, i64> {
         //    map_res(digit1, str::parse)(i)
         // }
@@ -353,7 +351,7 @@ mod test {
         assert_eq!(res.0, -1000);
         let res: Result<TestInt> = from_slice(oversized_bigint);
         assert!(res.is_err());
-        
+
         #[derive(Deserialize)]
         struct TestString(String);
 
@@ -362,7 +360,20 @@ mod test {
         let res: TestString = from_slice(oversized_bigint).unwrap();
         assert_eq!("-3492890328409238509324850943850943825024385", res.0);
     }
-    
-    
-    
+
+    #[test]
+    fn test_simple_struct() {
+        #[derive(Deserialize)]
+        struct Set {
+            key: String,
+            value: String,
+        }
+
+        // Array of 2 elements
+        let s = b"*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n";
+        let res: Set = from_slice(s).unwrap();
+
+        assert_eq!(res.key, "hello");
+        assert_eq!(res.value, "world");
+    }
 }

@@ -28,7 +28,6 @@ pub struct Set {
 enum NXorXX {
     NX,
     XX,
-
 }
 
 enum Expiry {
