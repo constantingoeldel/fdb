@@ -2,7 +2,7 @@ use nom::{AsBytes, Finish};
 use nom::branch::alt;
 use nom::bytes::complete::is_not;
 use nom::character::complete::{char, u128};
-use nom::sequence::delimited;
+use nom::sequence::{delimited, terminated};
 use serde::{de, Deserialize};
 use serde::de::{DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor};
 
@@ -339,7 +339,16 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_option<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        todo!()
+        if let Ok((i, _n)) = null(self.input) {
+            self.input = i;
+            return visitor.visit_none();
+        }
+
+        if let Ok((_, _)) = string(self.input) {
+            return visitor.visit_some(self);
+        }
+
+        visitor.visit_none()
     }
 
     fn deserialize_unit<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
@@ -349,7 +358,16 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_unit_struct<V>(self, name: &'static str, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        unimplemented!()
+        let (i, s) = string(self.input).finish()?;
+        self.input = i;
+        let s = std::str::from_utf8(s)?;
+
+
+        if s == name {
+            visitor.visit_unit()
+        } else {
+            Err(Error::UnitStructNameMismatch(name.to_string(), s.to_string()))
+        }
     }
 
     fn deserialize_newtype_struct<V>(self, name: &'static str, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
@@ -370,11 +388,11 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 
 
     fn deserialize_tuple<V>(self, len: usize, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        unimplemented!()
+        visitor.visit_seq(Slice::new(self, len))
     }
 
     fn deserialize_tuple_struct<V>(self, name: &'static str, len: usize, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        unimplemented!()
+        visitor.visit_seq(Slice::new(self, len))
     }
 
     fn deserialize_map<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
@@ -392,7 +410,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_enum<V>(self, name: &'static str, variants: &'static [&'static str], visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        dbg!(name, variants);
         visitor.visit_enum(Enum::new(self))
     }
 
@@ -401,8 +418,11 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_ignored_any<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        // use normal any
-        unimplemented!()
+        unimplemented!();
+        let (i, _) = terminated(is_not(TERM), terminator)(self.input).finish()?;
+
+        self.input = i;
+        visitor.visit_none()
     }
 }
 
@@ -422,8 +442,6 @@ impl<'de, 'a> EnumAccess<'de> for Enum<'a, 'de> {
     type Variant = Self;
 
     fn variant_seed<V>(self, seed: V) -> std::result::Result<(V::Value, Self), Self::Error> where V: DeserializeSeed<'de> {
-        dbg!("hello");
-        dbg!(std::str::from_utf8(self.de.input).unwrap());
         let variant = seed.deserialize(&mut *self.de)?;
         Ok((variant, self))
     }

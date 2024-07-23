@@ -38,6 +38,9 @@ pub enum Error {
 
     #[error("Invalid Command {0}")]
     InvalidCommand(String),
+
+    #[error("Unit struct name did not match, expected {0}, got {1}")]
+    UnitStructNameMismatch(String, String),
 }
 
 impl<'a> From<nom::error::Error<&'a [u8]>> for Error {
@@ -355,7 +358,7 @@ mod test {
         #[derive(Deserialize)]
         struct TestString(String);
 
-        let res: TestString = from_slice(fitting_bigint) .unwrap();
+        let res: TestString = from_slice(fitting_bigint).unwrap();
         assert_eq!(res.0, "-1000");
         let res: TestString = from_slice(oversized_bigint).unwrap();
         assert_eq!("-3492890328409238509324850943850943825024385", res.0);
@@ -465,15 +468,14 @@ mod test {
             Hello(String),
             Get(i64),
         }
-        
+
         let s = b"$5\r\nHello\r\n$5\r\nworld\r\n";
         let res: TestEnum = from_slice(s).unwrap();
         assert_eq!(res, TestEnum::Hello("world".to_string()));
-        
+
         let s = b"$3\r\nGet\r\n:123\r\n";
         let res: TestEnum = from_slice(s).unwrap();
         assert_eq!(res, TestEnum::Get(123));
-        
     }
 
 
@@ -494,10 +496,9 @@ mod test {
         let res: TestEnum = from_slice(s).unwrap();
         assert_eq!(res, TestEnum::Get("out".to_string(), "now".to_string()));
     }
-    
+
     #[test]
     fn test_struct_enum() {
-        
         #[derive(Deserialize, Debug, Eq, PartialEq)]
         enum TestEnum {
             Hello { key: String, value: String },
@@ -512,4 +513,106 @@ mod test {
         let res: TestEnum = from_slice(s).unwrap();
         assert_eq!(res, TestEnum::Get { key: "out".to_string(), value: "now".to_string() });
     }
+
+    #[test]
+    fn test_unit_struct() {
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        struct Test;
+
+        let s = b"$4\r\nTest\r\n";
+        let res: Test = from_slice(s).unwrap();
+        assert_eq!(res, Test);
+
+        let s = b"$4\r\nTEST\r\n";
+        let res: Result<Test> = from_slice(s);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_option_explicit_none() {
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        struct Key(Option<String>);
+
+        let s = b"$5\r\nHello\r\n";
+        let res: Key = from_slice(s).unwrap();
+        assert_eq!(res.0, Some("Hello".to_string()));
+
+        let s = b"$-1\r\n";
+        let res: Key = from_slice(s).unwrap();
+        assert_eq!(res.0, None);
+    }
+
+    #[test]
+    fn test_option_implicit_none() {
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        struct Key(String, Option<String>);
+
+        let s = b"$5\r\nHello\r\n$5\r\nWorld\r\n";
+        let res: Key = from_slice(s).unwrap();
+        assert_eq!(res.0, "Hello".to_string());
+        assert_eq!(res.1, Some("World".to_string()));
+
+        let s = b"$5\r\nHello\r\n";
+        let res: Key = from_slice(s).unwrap();
+        assert_eq!(res.0, "Hello".to_string());
+        assert_eq!(res.1, None);
+    }
+
+    #[test]
+    fn test_option_none_enum() {
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        enum Key {
+            Hello(Option<String>),
+            Get(Option<String>),
+        }
+
+        let s = b"$5\r\nHello\r\n";
+        let res: Key = from_slice(s).unwrap();
+        assert_eq!(res, Key::Hello(None));
+
+        let s = b"$3\r\nGet\r\n$5\r\nWorld\r\n";
+        let res: Key = from_slice(s).unwrap();
+        assert_eq!(res, Key::Get(Some("World".to_string())));
+    }
+
+    #[test]
+    fn test_tuple_struct() {
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        struct Key(String, i64);
+
+        let s = b"$5\r\nHello\r\n:123\r\n";
+        let res: Key = from_slice(s).unwrap();
+        assert_eq!(res, Key("Hello".to_string(), 123));
+    }
+
+    #[test]
+    fn test_tuple() {
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        struct Key {
+            a: (String, i64),
+        }
+
+        let s = b"*2\r\n$5\r\nHello\r\n:123\r\n";
+        let res: Key = from_slice(s).unwrap();
+        assert_eq!(res.a, ("Hello".to_string(), 123));
+    }
+
+    // TODO: How do access the deserialize_ignored_any_path?
+    // #[test]
+    // fn test_ignored() {
+    //     #[derive(Deserialize, Debug, Eq, PartialEq)]
+    //     struct Key {
+    //         a: String,
+    //         #[serde()]
+    //         b: i64,
+    //     }
+    // 
+    //     let s = b"*2\r\n$5\r\nHello\r\n:123\r\n";
+    //     let res: Key = from_slice(s).unwrap();
+    //     assert_eq!(res.a, "Hello");
+    //     assert_eq!(res.b, 0);
+    // }
+    
+    
+    
 }
