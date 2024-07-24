@@ -515,6 +515,57 @@ mod test {
     }
 
     #[test]
+    fn enum_in_struct() {
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        enum OnorOff {
+            On,
+            Off,
+        }
+
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        struct Test {
+            key: String,
+            value: OnorOff,
+        }
+
+        let s = b"*2\r\n$5\r\nHello\r\n$2\r\nOn\r\n";
+        let res: Test = from_slice(s).unwrap();
+        assert_eq!(res.key, "Hello");
+        assert_eq!(res.value, OnorOff::On);
+    }
+
+    #[test]
+    fn optional_enum_in_struct() {
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        enum OnorOff {
+            On,
+            Off,
+        }
+
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        struct Test {
+            key: String,
+            #[serde(default)]
+            value: Option<OnorOff>,
+        }
+
+        let s = b"*2\r\n$5\r\nHello\r\n$2\r\nOn\r\n";
+        let res: Test = from_slice(s).unwrap();
+        assert_eq!(res.key, "Hello");
+        assert_eq!(res.value, Some(OnorOff::On));
+
+        let s = b"*2\r\n$5\r\nHello\r\n_\r\n";
+        let res: Test = from_slice(s).unwrap();
+        assert_eq!(res.key, "Hello");
+        assert_eq!(res.value, None);
+
+        let s = b"*1\r\n$5\r\nHello\r\n";
+        let res: Test = from_slice(s).unwrap();
+        assert_eq!(res.key, "Hello");
+        assert_eq!(res.value, None);
+    }
+
+    #[test]
     fn test_unit_struct() {
         #[derive(Deserialize, Debug, Eq, PartialEq)]
         struct Test;
@@ -557,7 +608,7 @@ mod test {
         assert_eq!(res.0, "Hello".to_string());
         assert_eq!(res.1, None);
     }
-    
+
 
     #[test]
     fn test_option_none_enum() {

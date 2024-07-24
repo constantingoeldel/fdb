@@ -11,6 +11,7 @@ use parser::Commands;
 use crate::parser::ParseError;
 
 mod parser;
+mod test;
 
 #[tokio::main]
 async fn main() -> Result<(), io::Error> {

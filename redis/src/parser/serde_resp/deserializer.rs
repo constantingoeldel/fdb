@@ -108,7 +108,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 
         let c = self.input.first().expect("At this point, the input should not be empty");
         let c = *c as char;
-
         match c {
             '*' | '~' | '>' => self.deserialize_seq(visitor),
             '%' => self.deserialize_map(visitor),
@@ -434,7 +433,11 @@ impl<'de, 'a> EnumAccess<'de> for Enum<'a, 'de> {
     type Variant = Self;
 
     fn variant_seed<V>(self, seed: V) -> std::result::Result<(V::Value, Self), Self::Error> where V: DeserializeSeed<'de> {
+        dbg!("variant_seed");
+        dbg!(std::str::from_utf8(self.de.input).unwrap());
+
         let variant = seed.deserialize(&mut *self.de)?;
+        dbg!(std::str::from_utf8(self.de.input).unwrap());
         Ok((variant, self))
     }
 }
@@ -447,6 +450,7 @@ impl<'de, 'a> VariantAccess<'de> for Enum<'a, 'de> {
     }
 
     fn newtype_variant_seed<T>(self, seed: T) -> std::result::Result<T::Value, Self::Error> where T: DeserializeSeed<'de> {
+        dbg!("new type variant");
         seed.deserialize(&mut *self.de)
     }
 

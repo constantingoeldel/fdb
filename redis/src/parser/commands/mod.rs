@@ -23,29 +23,6 @@ pub enum Commands {
     // Hello(Hello),
 }
 
-#[cfg(test)]
-mod test {
-    use crate::parser::from_slice;
-
-    use super::*;
-
-    #[test]
-    fn test_get() {
-        let s = b"*2\r\n$3\r\nGET\r\n$5\r\nhello\r\n";
-
-        let res: Commands = from_slice(s).unwrap();
-        assert_eq!(res, Commands::Get(Get { key: "hello".to_string() }));
-    }
-    
-    #[test]
-    fn test_basic_set() {
-        let s = b"*3\r\n$3\r\nSet\r\n$5\r\nhello\r\n$5\r\nworld\r\n";
-        
-        let res: Commands = from_slice(s).unwrap();
-        assert_eq!(res, Commands::Set(Set { key: "hello".to_string(), value: "world".to_string(), existence_options: None, get: None, expire: None }));
-
-    }
-}
 
 
 

@@ -19,3 +19,19 @@ pub struct Get {
     pub key: String,
 }
 
+
+#[cfg(test)]
+mod test {
+    use crate::parser::from_slice;
+    use crate::parser::Commands;
+    
+    use super::*;
+
+    #[test]
+    fn test_get() {
+        let s = b"*2\r\n$3\r\nGET\r\n$5\r\nhello\r\n";
+
+        let res: Commands = from_slice(s).unwrap();
+        assert_eq!(res, Commands::Get(Get { key: "hello".to_string() }));
+    }
+}
