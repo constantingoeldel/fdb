@@ -575,8 +575,8 @@ mod test {
         assert_eq!(res, Test);
 
         let s = b"$4\r\nTEST\r\n";
-        let res: Result<Test> = from_slice(s);
-        assert!(res.is_err());
+        let res: Test = from_slice(s).unwrap();
+        assert_eq!(res, Test);
     }
 
     #[test]

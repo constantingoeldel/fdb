@@ -22,7 +22,7 @@ use macro_derive::DeserializeUntagged;
 
 #[derive(Deserialize, Debug, PartialEq, Eq)]
 pub struct Set {
-    pub cmd: SET,
+    cmd: SET,
     pub key: String,
     pub value: String,
 
@@ -52,7 +52,7 @@ pub enum Existence {
 
 #[derive(Deserialize, Debug, Eq, PartialEq)]
 pub enum Expiry {
-    EX(String),
+    EX(u32),
     PX(u64),
     EXAT(u64),
     KEEPTTL,
@@ -217,6 +217,6 @@ mod test {
         let s = b"*5\r\n$3\r\nset\r\n$5\r\nhello\r\n$5\r\nworld\r\n$2\r\nEX\r\n$3\r\n123\r\n";
 
         let res: Commands = from_slice(s).unwrap();
-        assert_eq!(res, Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Some(Options::Expiry(Expiry::EX(String::from("123")))) }));
+        assert_eq!(res, Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Some(Options::Expiry(Expiry::EX(123))) }));
     }
 }

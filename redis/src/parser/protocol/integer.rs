@@ -6,12 +6,12 @@ use nom::combinator::{map_res, opt};
 use nom::Err::Error;
 use nom::error::{ErrorKind, FromExternalError};
 use nom::IResult;
-use nom::sequence::{delimited, tuple};
+use nom::sequence::delimited;
 use serde::Deserialize;
-use crate::parser::protocol::big_number::big_number;
 
+use crate::parser::protocol::{string, TryParse};
+use crate::parser::protocol::big_number::big_number;
 use crate::parser::protocol::terminator::terminator;
-use crate::parser::protocol::TryParse;
 
 #[derive(Eq, PartialEq, Debug, Hash, Deserialize)]
 pub struct Integer(i64);
@@ -58,16 +58,19 @@ pub fn parse_digits(i: &[u8]) -> IResult<&[u8], i64> {
 impl<'a> TryParse<'a> for Integer {
     type Output = Self;
     fn try_parse(value: &'a [u8]) -> Result<(&'a [u8], Self::Output), nom::error::Error<&'a [u8]>> {
-        let (i, num) = alt((integer, big_number))(value).finish()?;
-
-        let (j, (sign, digits)) = tuple((opt(sign), parse_digits))(num).finish()?;
-
+        let (i, num) = alt((integer, big_number, string))(value).finish()?;
+        dbg!(std::str::from_utf8(num));
+        let (j, sign) = opt(sign)(num).finish()?;
+        dbg!(sign);
+        let (j, digits) = parse_digits(j).finish()?;
+        dbg!(digits);
         assert_eq!(j.len(), 0);
 
         // If there is no explicit sign, assume positive int
         let sign = sign.unwrap_or(1);
+        let num = sign * digits;
 
-        Ok((i, Integer(sign * digits)))
+        Ok((i, Integer(num)))
     }
 }
 
@@ -91,6 +94,22 @@ fn test_integer_negative() {
 #[test]
 fn test_integer_positive() {
     let s: &[u8] = b":+1000\r\n";
+    let (rem, num) = Integer::try_parse(s).unwrap();
+    assert_eq!(rem.len(), 0);
+    assert_eq!(num, Integer(1000));
+}
+
+#[test]
+fn test_integer_from_string() {
+    let s: &[u8] = b"+1000\r\n";
+    let (rem, num) = Integer::try_parse(s).unwrap();
+    assert_eq!(rem.len(), 0);
+    assert_eq!(num, Integer(1000));
+}
+
+#[test]
+fn integer_from_bulk_string() {
+    let s: &[u8] = b"$4\r\n1000\r\n";
     let (rem, num) = Integer::try_parse(s).unwrap();
     assert_eq!(rem.len(), 0);
     assert_eq!(num, Integer(1000));

@@ -16,8 +16,12 @@ use serde::Deserialize;
 /// Get the value of key. If the key does not exist the special value nil is returned. An error is returned if the value stored at key is not a string, because GET only handles string values.
 #[derive(Deserialize, Debug, PartialEq, Eq)]
 pub struct Get {
+    cmd: GET,
     pub key: String,
 }
+
+#[derive(Deserialize, Debug, Eq, PartialEq)]
+struct GET;
 
 
 #[cfg(test)]
@@ -32,6 +36,6 @@ mod test {
         let s = b"*2\r\n$3\r\nGET\r\n$5\r\nhello\r\n";
 
         let res: Commands = from_slice(s).unwrap();
-        assert_eq!(res, Commands::Get(Get { key: "hello".to_string() }));
+        assert_eq!(res, Commands::Get(Get { cmd: GET, key: "hello".to_string() }));
     }
 }

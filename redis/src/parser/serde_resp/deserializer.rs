@@ -56,7 +56,7 @@ pub fn from_str<'a, T>(s: &'a str) -> Result<T>
     from_slice(s.as_bytes())
 }
 
-pub fn from_reader<'a, T>(input: &'a mut dyn std::io::Read) -> Result<T>
+pub fn from_reader<T>(input: &mut dyn std::io::Read) -> Result<T>
     where
         T: serde::de::DeserializeOwned,
 {
