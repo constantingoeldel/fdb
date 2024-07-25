@@ -70,9 +70,7 @@ struct KEEPTTL;
 
 #[cfg(test)]
 mod test {
-    use std::rc::Rc;
-
-    use serde::de::{EnumAccess, Error, SeqAccess, VariantAccess};
+    use serde::de::{EnumAccess, Error, SeqAccess, VariantAccess, Visitor};
     use serde::Deserializer;
 
     use crate::parser::Commands;
@@ -106,52 +104,71 @@ mod test {
         #[derive(Debug, Eq, PartialEq)]
         enum Options {
             Expiry(Expiry),
-            // Existence(Existence),
+            Existence(Existence),
         }
 
         impl<'de> Deserialize<'de> for Options {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
-                let deserializer = Rc::new(deserializer);
-                let des = deserializer.clone();
+                // let content = <Existence as serde::Deserialize>::deserialize(deserializer)?;
+                // let input = <Bytes as serde::Deserialize>::deserialize(deserializer)?;
+                // let deserializer_copy = crate::parser::serde_resp::Deserializer::new(input);
+                // let deserializer_copy_2 = crate::parser::serde_resp::Deserializer::new(input);
 
-                let expiry = Expiry::deserialize();
-                if let Ok(res) = expiry {
-                    return Ok(Options::Expiry(res));
-                }
+                // struct BytesVisitor;
+                //
+                // impl <'de> Visitor for BytesVisitor
 
 
-                // let existence = Existence::deserialize(__deserializer);
-                // if let Ok(res) = existence {
-                //     return Ok(Options::Existence(res));
-                // }
+                let content = <serde::__private::de::Content as serde::Deserialize>::deserialize(deserializer)?;
+                dbg!(&content);
+                let bytes = content.as_str();
+                // let deserializer = <serde::__private::de::ContentRefDeserializer::<D::Error>>::new(&content);
+
+                if let Some(input) = bytes {
+                    let b = input.as_bytes();
+
+
+                    let expiry: Result<Expiry, crate::parser::ParseError> = from_slice(b);
+                    if let Ok(res) = expiry {
+                        return Ok(Options::Expiry(res));
+                    }
+
+
+                    let existence: Result<Existence, crate::parser::ParseError> = from_slice(b);
+                    if let Ok(res) = existence {
+                        return Ok(Options::Existence(res));
+                    }
 
                 let exp_err = expiry.unwrap_err();
                 // let exist_err = existence.unwrap_err();
-                Err(serde::de::Error::custom(format!("No fitting option found. \nError for Expiry was: {}\nError for Existence was: {}", exp_err, exp_err)))
+                    return Err(serde::de::Error::custom(format!("No fitting option found. \nError for Expiry was: {}\nError for Existence was: {}", exp_err, exp_err)));
+            }
+                Err(serde::de::Error::custom("No remaining input when building copies of the deserializer"))
             }
         }
 
-        // #[derive(Deserialize, Debug, Eq, PartialEq)]
-        // enum Existence {
-        //     XX,
-        //     NX,
-        // }
-        //
+        #[derive(Deserialize, Debug, Eq, PartialEq)]
+        enum Existence {
+            XX,
+            NX,
+        }
+
         #[derive(Deserialize, Debug, Eq, PartialEq)]
         enum Expiry {
             EX(String),
+            KEEPTTL,
 
         }
-        //
-        // let s = b"$2\r\nNX\r\n";
-        // let res: Options = from_slice(s).unwrap();
-        // assert_eq!(res, Options::Existence(Existence::NX));
-        //
 
-        // let s = b"$7\r\nKEEPTTL\r\n";
-        // let res: Options = from_slice(s).unwrap();
-        // assert_eq!(res, Options::Expiry(Expiry::KEEPTTL));
-        //
+        let s = b"$2\r\nNX\r\n";
+        let res: Options = from_slice(s).unwrap();
+        assert_eq!(res, Options::Existence(Existence::NX));
+
+
+        let s = b"$7\r\nKEEPTTL\r\n";
+        let res: Options = from_slice(s).unwrap();
+        assert_eq!(res, Options::Expiry(Expiry::KEEPTTL));
+
 
         let s = b"$2\r\nEX\r\n$4\r\ntest\r\n";
         let res: Options = from_slice(s).unwrap();

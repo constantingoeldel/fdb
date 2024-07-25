@@ -3,7 +3,7 @@ use std::fmt::Display;
 use serde::{de, ser};
 use thiserror::Error;
 
-pub use deserializer::from_slice;
+pub use deserializer::{from_slice, Deserializer};
 
 mod deserializer;
 mod serializer;

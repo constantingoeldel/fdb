@@ -106,18 +106,19 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         //     return self.deserialize_map(visitor);
         // }
 
-        let c = self.input.first().expect("At this point, the input should not be empty");
-        let c = *c as char;
-        match c {
-            '*' | '~' | '>' => self.deserialize_seq(visitor),
-            '%' => self.deserialize_map(visitor),
-            '+' | '-' | '$' | '(' | '!' | '=' => self.deserialize_str(visitor),
-            ':' => self.deserialize_i64(visitor),
-            '_' => self.deserialize_unit(visitor),
-            '#' => self.deserialize_bool(visitor),
-            ',' => self.deserialize_f64(visitor),
-            _ => unimplemented!("Unknown type"),
-        }
+        self.deserialize_bytes(visitor)
+        // let c = self.input.first().expect("At this point, the input should not be empty");
+        // let c = *c as char;
+        // match c {
+        //     '*' | '~' | '>' => self.deserialize_seq(visitor),
+        //     '%' => self.deserialize_map(visitor),
+        //     '+' | '-' | '$' | '(' | '!' | '=' => self.deserialize_str(visitor),
+        //     ':' => self.deserialize_i64(visitor),
+        //     '_' => self.deserialize_unit(visitor),
+        //     '#' => self.deserialize_bool(visitor),
+        //     ',' => self.deserialize_f64(visitor),
+        //     _ => unimplemented!("Unknown type"),
+        // }
     }
 
     fn deserialize_bool<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
@@ -322,7 +323,14 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_bytes<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        Err(Error::BytesNotSupported)
+        // Consume the entire input and return it as bytes
+        // Used to create a copy of the deserializer for deserializing untagged enums of non-self-describing formats like RESP
+        let bytes = self.input;
+        self.input = &[];
+        assert_ne!(bytes.len(), 0);
+        visitor.visit_bytes(bytes)
+
+        // Err(Error::BytesNotSupported)
     }
 
     fn deserialize_byte_buf<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
