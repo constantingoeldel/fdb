@@ -15,7 +15,7 @@ use super::{Error, Result};
 use super::super::protocol::boolean::Boolean;
 use super::super::protocol::TryParse;
 
-struct Deserializer<'de> {
+pub struct Deserializer<'de> {
     input: &'de [u8],
 }
 
@@ -24,11 +24,11 @@ impl<'de> Deserializer<'de> {
         Deserializer { input }
     }
 
-    pub fn from_str(input: &'de str) -> Self {
+    fn from_str(input: &'de str) -> Self {
         Deserializer { input: input.as_bytes() }
     }
 
-    pub fn from_reader(input: &'de mut dyn std::io::Read, buf: &'de mut Vec<u8>) -> std::io::Result<Self> {
+    fn from_reader(input: &'de mut dyn std::io::Read, buf: &'de mut Vec<u8>) -> std::io::Result<Self> {
         input.read_to_end(buf)?;
         Ok(Deserializer { input: buf.as_slice() })
     }
@@ -42,12 +42,14 @@ pub fn from_slice<'a, T>(s: &'a [u8]) -> Result<T>
     let mut deserializer = Deserializer::from_slice(s);
     let t = T::deserialize(&mut deserializer)?;
 
-    if deserializer.input.is_empty() {
-        Ok(t)
-    } else {
-        Err(Error::TrailingCharacters)
-    }
+    // if deserializer.input.is_empty() {
+    //     Ok(t)
+    // } else {
+    //     Err(Error::TrailingCharacters)
+    // }
+    Ok(t)
 }
+
 
 pub fn from_str<'a, T>(s: &'a str) -> Result<T>
     where
@@ -300,13 +302,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     fn deserialize_bytes<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
         // Consume the entire input and return it as bytes
         // Used to create a copy of the deserializer for deserializing untagged enums of non-self-describing formats like RESP
-        let bytes = self.input;
-        self.input = &[];
-        visitor.visit_bytes(bytes)
+        visitor.visit_borrowed_bytes(self.input)
     }
 
+
     fn deserialize_byte_buf<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        Err(Error::BytesNotSupported)
+        visitor.visit_byte_buf(self.input)
+        
     }
 
     fn deserialize_option<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
@@ -348,22 +350,25 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     fn deserialize_seq<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
         let seq = alt((char(ARRAY), char(SET), char(PUSH)));
 
-        let (i, len) = delimited(seq, is_not(TERM), terminator)(self.input).finish()?;
-        let len = std::str::from_utf8(len).unwrap().parse::<usize>().unwrap();
-        self.input = i;
+        let mut length = None;
+
+        if let Ok((i, len)) = delimited(seq, is_not(TERM), terminator)(self.input).finish() {
+            length = Some(std::str::from_utf8(len).unwrap().parse::<usize>()?);
+            self.input = i;
+        }
 
 
-        let slice = Slice::new(self, len);
+        let slice = Slice::new(self, length);
         visitor.visit_seq(slice)
     }
 
 
     fn deserialize_tuple<V>(self, len: usize, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        visitor.visit_seq(Slice::new(self, len))
+        visitor.visit_seq(Slice::new(self, Some(len)))
     }
 
     fn deserialize_tuple_struct<V>(self, name: &'static str, len: usize, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        visitor.visit_seq(Slice::new(self, len))
+        visitor.visit_seq(Slice::new(self, Some(len)))
     }
 
     fn deserialize_map<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
@@ -376,7 +381,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_struct<V>(self, name: &'static str, fields: &'static [&'static str], visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        dbg!(name, fields);
         self.deserialize_seq(visitor)
     }
 
@@ -413,8 +417,7 @@ impl<'de, 'a> EnumAccess<'de> for Enum<'a, 'de> {
     type Variant = Self;
 
     fn variant_seed<V>(self, seed: V) -> std::result::Result<(V::Value, Self), Self::Error> where V: DeserializeSeed<'de> {
-        dbg!("variant_seed");
-        dbg!(std::str::from_utf8(self.de.input).unwrap());
+        // dbg!(std::str::from_utf8(self.de.input).unwrap());
 
         let variant = seed.deserialize(&mut *self.de)?;
         dbg!(std::str::from_utf8(self.de.input).unwrap());
@@ -430,27 +433,28 @@ impl<'de, 'a> VariantAccess<'de> for Enum<'a, 'de> {
     }
 
     fn newtype_variant_seed<T>(self, seed: T) -> std::result::Result<T::Value, Self::Error> where T: DeserializeSeed<'de> {
-        dbg!("new type variant");
         seed.deserialize(&mut *self.de)
     }
 
     fn tuple_variant<V>(self, len: usize, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-       visitor.visit_seq(Slice::new(self.de, len))
+        visitor.visit_seq(Slice::new(self.de, Some(len)))
     }
 
     fn struct_variant<V>(self, fields: &'static [&'static str], visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        visitor.visit_seq(Slice::new(self.de, fields.len()))
+        visitor.visit_seq(Slice::new(self.de, Some(fields.len())))
     }
 }
 
-struct Slice<'a, 'de> {
+pub struct Slice<'a, 'de> {
     de: &'a mut Deserializer<'de>,
-    num_items: usize,
+    /// If known, the number of entries in the Array.
+    /// If none, the input data will be consumed until empty
+    num_items: Option<usize>,
 }
 
 impl<'a, 'de> Slice<'a, 'de> {
-    fn new(de: &'a mut Deserializer<'de>, num_items: usize) -> Self {
-        Slice { de, num_items }
+    pub fn new(de: &'a mut Deserializer<'de>, max: Option<usize>) -> Self {
+        Slice { de, num_items: max }
     }
 }
 
@@ -459,16 +463,18 @@ impl<'a, 'de> SeqAccess<'de> for Slice<'a, 'de> {
 
     fn next_element_seed<T>(&mut self, seed: T) -> std::result::Result<Option<T::Value>, Self::Error> where T: DeserializeSeed<'de> {
         // If there are no more items, return None
-        if self.num_items == 0 {
-            return Ok(None);
+        if let Some(num_items) = self.num_items {
+            if num_items == 0 {
+                return Ok(None);
+            }
+            self.num_items = Some(num_items - 1);
         }
 
-        self.num_items -= 1;
         seed.deserialize(&mut *self.de).map(Some)
     }
 
     fn size_hint(&self) -> Option<usize> {
-        Some(self.num_items)
+        self.num_items
     }
 }
 

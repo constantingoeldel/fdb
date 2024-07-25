@@ -41,9 +41,12 @@ fn impl_deserialize_untagged(ast: &syn::DeriveInput) -> TokenStream {
                         formatter.write_str("one of the variants of the enum")
                     }
 
-                    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E> where E: serde::de::Error {
+                    fn visit_borrowed_bytes<E>(self, mut v: &'de [u8]) -> Result<Self::Value, E> where E: serde::de::Error {
+                        let mut errors = Vec::new();
                         #(#variant_impls)*
-                        Err(serde::de::Error::custom(format!("No fitting option found.")))
+
+                        let errors_str = errors.iter().map(|e| e.to_string()).collect::<Vec<String>>().join(" | ");
+                        Err(serde::de::Error::custom(format!("No fitting option found. Errors: {}", errors_str)))
                     }
 
                 }
@@ -58,14 +61,20 @@ fn impl_deserialize_untagged(ast: &syn::DeriveInput) -> TokenStream {
 
 // TODO: Expand to cases where variant fields != variant name
 fn variant_testing(enum_name: &Ident, variant: &Ident) -> TokenStr {
-    let gen = quote! {
+    quote! {
             let variant: Result<#variant, crate::parser::ParseError> = crate::parser::from_slice(v);
-            if let Ok(res) = variant {
-            return Ok(#enum_name::#variant(res));
+            match variant {
+                Ok(res) => {
+                v = &v[10..];
+                return Ok(#enum_name::#variant(res))
+                },
+                Err(e) => {
+                    // dbg!(&e);
+                    errors.push(e);
             }
-    };
+            }
+    }
 
-    gen.into()
 }
 
 //

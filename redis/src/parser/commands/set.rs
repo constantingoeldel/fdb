@@ -1,6 +1,11 @@
-use serde::Deserialize;
+use std::fmt::Formatter;
+
+use serde::{Deserialize, Deserializer};
+use serde::de::{Error, SeqAccess, Visitor};
 
 use macro_derive::DeserializeUntagged;
+
+use crate::parser::from_slice;
 
 /// SET key value [NX | XX] [GET] [EX seconds | PX milliseconds |
 /// EXAT unix-time-seconds | PXAT unix-time-milliseconds | KEEPTTL]
@@ -27,19 +32,70 @@ pub struct Set {
     pub value: String,
 
     #[serde(default)]
-    pub options: Option<Options>,
+    pub options: Options,
 }
+
+// options! { Expiry, Existence, GET }
+#[derive(Debug, PartialEq, Eq, Default)]
+struct Options {
+    expiry: Option<Expiry>,
+    existence: Option<Existence>,
+    get: Option<GET>,
+}
+
+
+impl<'de> Deserialize<'de> for Options {
+    fn deserialize<D>(mut deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+        #[derive(DeserializeUntagged, Debug, Eq, PartialEq)]
+        enum OptionsEnum {
+            Expiry(Expiry),
+            Existence(Existence),
+            GET(GET),
+        }
+
+        struct OptionsVisitor;
+
+        impl<'de> Visitor<'de> for OptionsVisitor {
+            type Value = Options;
+
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                formatter.write_str("One or more variants of the enum")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where A: SeqAccess<'de> {
+                let mut options = Options {
+                    expiry: None,
+                    existence: None,
+                    get: None,
+                };
+
+
+                for _ in 0..3 {
+                    let res = seq.next_element();
+                    dbg!(&res);
+
+                    if let Ok(Some(option)) = res {
+                        match option {
+                            OptionsEnum::Expiry(expiry) => options.expiry = Some(expiry),
+                            OptionsEnum::Existence(existence) => options.existence = Some(existence),
+                            OptionsEnum::GET(get) => options.get = Some(get),
+                        }
+                    }
+                }
+
+                Ok(options)
+            }
+        }
+
+        deserializer.deserialize_seq(OptionsVisitor)
+    }
+}
+
 
 #[derive(Deserialize, Debug, Eq, PartialEq)]
 struct SET;
 
 
-#[derive(DeserializeUntagged, Debug, Eq, PartialEq)]
-enum Options {
-    Expiry(Expiry),
-    Existence(Existence),
-    GET(GET),
-}
 
 #[derive(Deserialize, Debug, Eq, PartialEq)]
 struct GET;
@@ -53,8 +109,8 @@ pub enum Existence {
 #[derive(Deserialize, Debug, Eq, PartialEq)]
 pub enum Expiry {
     EX(u32),
-    PX(u64),
-    EXAT(u64),
+    PX(u32),
+    EXAT(u32),
     KEEPTTL,
 }
 
@@ -74,6 +130,8 @@ struct KEEPTTL;
 mod test {
     use std::fmt::Formatter;
 
+    use nom::Offset;
+    use serde::__private::de::{Content, ContentRefDeserializer};
     use serde::de::{EnumAccess, Error, SeqAccess, VariantAccess, Visitor};
     use serde::Deserializer;
 
@@ -96,14 +154,14 @@ mod test {
     #[test]
     fn test_set_with_existence_option() {
         let s = b"*4\r\n$3\r\nset\r\n$5\r\nhello\r\n$5\r\nworld\r\n$2\r\nNX\r\n";
-        let c = Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Some(Options::Existence(Existence::NX)) });
+        let c = Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Options { existence: Some(Existence::NX), expiry: None, get: None } });
         let res: Commands = from_slice(s).unwrap();
         assert_eq!(res, c);
 
         let s = b"*4\r\n$3\r\nset\r\n$5\r\nhello\r\n$5\r\nworld\r\n$2\r\nXX\r\n";
 
         let res: Commands = from_slice(s).unwrap();
-        assert_eq!(res, Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Some(Options::Existence(Existence::XX)) }));
+        assert_eq!(res, Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Options { existence: Some(Existence::XX), expiry: None, get: None } }));
     }
 
     #[test]
@@ -139,13 +197,14 @@ mod test {
                         formatter.write_str("One of the variants of the enum")
                     }
 
-                    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E> where E: Error {
-                        let expiry: Result<Expiry, crate::parser::ParseError> = from_slice(v);
+                    fn visit_byte_buf<E>(self, mut v: Vec<u8>) -> Result<Self::Value, E> where E: Error {
+                        let expiry: Result<Expiry, crate::parser::ParseError> = from_slice(&v);
                         if let Ok(res) = expiry {
+                            // v.drain(0..res.len());
                             return Ok(Options::Expiry(res));
                         }
 
-                        let existence: Result<Existence, crate::parser::ParseError> = from_slice(v);
+                        let existence: Result<Existence, crate::parser::ParseError> = from_slice(&v);
                         if let Ok(res) = existence {
                             return Ok(Options::Existence(res));
                         }
@@ -156,7 +215,9 @@ mod test {
                     }
                 }
 
-                deserializer.deserialize_bytes(NonSelfDescribingUntaggedEnumVisitor)
+                deserializer.deserialize_byte_buf(NonSelfDescribingUntaggedEnumVisitor)
+
+                
             }
         }
 
@@ -177,6 +238,13 @@ mod test {
 
     #[test]
     fn test_options() {
+        #[derive(DeserializeUntagged, Debug, Eq, PartialEq)]
+        enum Options {
+            Expiry(Expiry),
+            Existence(Existence),
+            GET(GET),
+        }
+
         let s = b"$2\r\nNX\r\n";
 
         let res: Options = from_slice(s).unwrap();
@@ -209,7 +277,7 @@ mod test {
         let s = b"*4\r\n$3\r\nset\r\n$5\r\nhello\r\n$5\r\nworld\r\n$3\r\nGET\r\n";
 
         let res: Commands = from_slice(s).unwrap();
-        assert_eq!(res, Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Some(Options::GET(GET)) }));
+        assert_eq!(res, Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Options { existence: None, get: Some(GET), expiry: None } }));
     }
 
     #[test]
@@ -217,6 +285,16 @@ mod test {
         let s = b"*5\r\n$3\r\nset\r\n$5\r\nhello\r\n$5\r\nworld\r\n$2\r\nEX\r\n$3\r\n123\r\n";
 
         let res: Commands = from_slice(s).unwrap();
-        assert_eq!(res, Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Some(Options::Expiry(Expiry::EX(123))) }));
+        assert_eq!(res, Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Options { existence: None, get: None, expiry: Some(Expiry::EX(123)) } }));
+    }
+
+    #[test]
+    fn test_with_all_options() {
+        let s = b"*7\r\n$3\r\nset\r\n$5\r\nhello\r\n$5\r\nworld\r\n$2\r\nNX\r\n$3\r\nGET\r\n$2\r\nPX\r\n$6\r\n123444\r\n";
+
+        let res: Commands = from_slice(s).unwrap();
+        assert_eq!(res, Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Options { existence: Some(Existence::NX), get: Some(GET), expiry: Some(Expiry::EX(123)) } }));
     }
 }
+
+

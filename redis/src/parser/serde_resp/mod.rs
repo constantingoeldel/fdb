@@ -3,7 +3,7 @@ use std::fmt::Display;
 use serde::{de, ser};
 use thiserror::Error;
 
-pub use deserializer::{from_slice};
+pub use deserializer::{from_slice, Slice, Deserializer};
 
 mod deserializer;
 mod serializer;
@@ -30,19 +30,22 @@ pub enum Error {
     BytesNotSupported,
 
     #[error("String parsing error: {0}")]
-    StrParsingError(#[from] std::str::Utf8Error),
+    StrParsing(#[from] std::str::Utf8Error),
 
     #[error("String parsing error: {0}")]
-    StringParsingError(#[from] std::string::FromUtf8Error),
+    StringParsing(#[from] std::string::FromUtf8Error),
 
     #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
+    Io(#[from] std::io::Error),
 
     #[error("Invalid Command {0}")]
     InvalidCommand(String),
 
     #[error("Unit struct name did not match, expected {0}, got {1}")]
     UnitStructNameMismatch(String, String),
+    
+    #[error("Error when parsing a string as an integer: {0}")]
+    ParseInt(#[from] std::num::ParseIntError),
 }
 
 impl<'a> From<nom::error::Error<&'a [u8]>> for Error {
