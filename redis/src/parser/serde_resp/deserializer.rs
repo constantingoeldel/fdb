@@ -15,7 +15,7 @@ use super::{Error, Result};
 use super::super::protocol::boolean::Boolean;
 use super::super::protocol::TryParse;
 
-pub struct Deserializer<'de> {
+struct Deserializer<'de> {
     input: &'de [u8],
 }
 

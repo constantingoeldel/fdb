@@ -454,6 +454,7 @@ impl Transaction {
         }
     }
 
+    //noinspection ALL
     /// Sets the value in the database to the larger of the existing value and other. If the key is not present, other is stored
     pub async fn atomic_max<K: Into<Key>>(&self, key: K, other: u32) {
         let key = key.into();
@@ -491,6 +492,7 @@ impl Transaction {
         }
     }
 
+    //noinspection ALL
     /// Sets the value in the database to the smaller of the existing value and other. If the key is not present, other is stored
     pub async fn atomic_min<K: Into<Key>>(&self, key: K, other: u32) {
         let key = key.into();

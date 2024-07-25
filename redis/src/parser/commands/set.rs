@@ -30,12 +30,8 @@ pub struct Set {
     pub options: Option<Options>,
 }
 
-#[derive(Deserialize, Debug, PartialEq, Eq)]
-enum SET {
-    SET,
-    set,
-    Set,
-}
+#[derive(Deserialize, Debug, Eq, PartialEq)]
+struct SET;
 
 
 #[derive(DeserializeUntagged, Debug, Eq, PartialEq)]
@@ -46,11 +42,7 @@ enum Options {
 }
 
 #[derive(Deserialize, Debug, Eq, PartialEq)]
-enum GET {
-    GET,
-    Get,
-    get,
-}
+struct GET;
 
 #[derive(Deserialize, Debug, Eq, PartialEq)]
 pub enum Existence {
@@ -60,7 +52,7 @@ pub enum Existence {
 
 #[derive(Deserialize, Debug, Eq, PartialEq)]
 pub enum Expiry {
-    EX(i64),
+    EX(String),
     PX(u64),
     EXAT(u64),
     KEEPTTL,
@@ -95,7 +87,7 @@ mod test {
         let s = b"*3\r\n$3\r\nSet\r\n$5\r\nhello\r\n$5\r\nworld\r\n";
 
         let res: Set = from_slice(s).unwrap();
-        assert_eq!(res.cmd, SET::Set);
+        assert_eq!(res.cmd, SET);
         let res: Commands = from_slice(s).unwrap();
 
         // assert_eq!(res, Commands::Set(Set { cmd: SET::SET, key: "hello".to_string(), value: "world".to_string(), options: None }));
@@ -104,14 +96,14 @@ mod test {
     #[test]
     fn test_set_with_existence_option() {
         let s = b"*4\r\n$3\r\nset\r\n$5\r\nhello\r\n$5\r\nworld\r\n$2\r\nNX\r\n";
-
+        let c = Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Some(Options::Existence(Existence::NX)) });
         let res: Commands = from_slice(s).unwrap();
-        assert_eq!(res, Commands::Set(Set { cmd: SET::set, key: "hello".to_string(), value: "world".to_string(), options: Some(Options::Existence(Existence::NX)) }));
+        assert_eq!(res, c);
 
         let s = b"*4\r\n$3\r\nset\r\n$5\r\nhello\r\n$5\r\nworld\r\n$2\r\nXX\r\n";
 
         let res: Commands = from_slice(s).unwrap();
-        assert_eq!(res, Commands::Set(Set { cmd: SET::set, key: "hello".to_string(), value: "world".to_string(), options: Some(Options::Existence(Existence::XX)) }));
+        assert_eq!(res, Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Some(Options::Existence(Existence::XX)) }));
     }
 
     #[test]
@@ -193,12 +185,12 @@ mod test {
         let s = b"$3\r\nGET\r\n";
 
         let res: Options = from_slice(s).unwrap();
-        assert_eq!(res, Options::GET(GET::GET));
+        assert_eq!(res, Options::GET(GET));
 
         let s = b"$3\r\nget\r\n";
 
         let res: Options = from_slice(s).unwrap();
-        assert_eq!(res, Options::GET(GET::get));
+        assert_eq!(res, Options::GET(GET));
 
         let s = b"$7\r\nKEEPTTL\r\n";
         let res: KEEPTTL = from_slice(s).unwrap();
@@ -207,7 +199,7 @@ mod test {
         let res: Options = from_slice(s).unwrap();
 
 
-        let s = b"$2\r\nEX\r\n:1234\r\n";
+        let s = b"$2\r\nEX\r\n$3\r\n123\r\n";
         let res: Expiry = from_slice(s).unwrap();
         let res: Options = from_slice(s).unwrap();
     }
@@ -217,14 +209,14 @@ mod test {
         let s = b"*4\r\n$3\r\nset\r\n$5\r\nhello\r\n$5\r\nworld\r\n$3\r\nGET\r\n";
 
         let res: Commands = from_slice(s).unwrap();
-        assert_eq!(res, Commands::Set(Set { cmd: SET::set, key: "hello".to_string(), value: "world".to_string(), options: Some(Options::GET(GET::GET)) }));
+        assert_eq!(res, Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Some(Options::GET(GET)) }));
     }
 
     #[test]
     fn test_with_expire() {
-        // let s = b"*5\r\n$3\r\nset\r\n$5\r\nhello\r\n$5\r\nworld\r\n$2\r\nEX\r\n$3\r\n123\r\n";
-        //
-        // let res: Commands = from_slice(s).unwrap();
-        // assert_eq!(res, Commands::Set(Set { key: "hello".to_string(), value: "world".to_string(), options: Some(Options::Expiry(Expiry::EX(String::from("123")))) }));
+        let s = b"*5\r\n$3\r\nset\r\n$5\r\nhello\r\n$5\r\nworld\r\n$2\r\nEX\r\n$3\r\n123\r\n";
+
+        let res: Commands = from_slice(s).unwrap();
+        assert_eq!(res, Commands::Set(Set { cmd: SET, key: "hello".to_string(), value: "world".to_string(), options: Some(Options::Expiry(Expiry::EX(String::from("123")))) }));
     }
 }
