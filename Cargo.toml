@@ -1,3 +1,3 @@
 [workspace]
-members = ["fdb", "fdb-c", "redis"]
+members = ["fdb", "fdb-c", "macro_derive", "redis"]
 resolver = "2"

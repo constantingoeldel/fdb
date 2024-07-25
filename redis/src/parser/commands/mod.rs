@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use macro_derive::DeserializeUntagged;
 
 use crate::parser::commands::get::Get;
 use crate::parser::commands::set::Set;
@@ -10,14 +11,9 @@ mod getdel;
 mod xadd;
 
 
-#[derive(Deserialize, Debug, Eq, PartialEq)]
-#[serde(tag = "untagged")]
+#[derive(DeserializeUntagged, Debug, Eq, PartialEq)]
 pub enum Commands {
-    #[serde(alias = "GET")]
-    #[serde(alias = "get")]
     Get(Get),
-    #[serde(alias = "SET")]
-    #[serde(alias = "set")]
     Set(Set),
     // GetDel(GetDel),
     // Hello(Hello),

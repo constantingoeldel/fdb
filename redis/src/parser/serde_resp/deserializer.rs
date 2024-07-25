@@ -94,31 +94,20 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
     fn deserialize_any<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
+        eprintln!("deserialize_any does not make sense for non-self-describing formats like RESP! Check that you are using the correct deserialization method. It is fine for the basic types of RESP like integers, doubles, strings, and arrays but not for e.g. Redis command option parsing.");
 
-        // // If the input is an array, set or push, deserialize it as a sequence
-        // let seq = alt((char(ARRAY), char(SET), char(PUSH)));
-        // if let Ok((_, _)) = delimited(seq, is_not(TERM), terminator)(self.input).finish() {
-        //     return self.deserialize_seq(visitor);
-        // }
-        //
-        // // If the input is a map, deserialize it as a map
-        // if let Ok((_, _)) = delimited(char('%'), is_not(TERM), terminator)(self.input) {
-        //     return self.deserialize_map(visitor);
-        // }
-
-        self.deserialize_bytes(visitor)
-        // let c = self.input.first().expect("At this point, the input should not be empty");
-        // let c = *c as char;
-        // match c {
-        //     '*' | '~' | '>' => self.deserialize_seq(visitor),
-        //     '%' => self.deserialize_map(visitor),
-        //     '+' | '-' | '$' | '(' | '!' | '=' => self.deserialize_str(visitor),
-        //     ':' => self.deserialize_i64(visitor),
-        //     '_' => self.deserialize_unit(visitor),
-        //     '#' => self.deserialize_bool(visitor),
-        //     ',' => self.deserialize_f64(visitor),
-        //     _ => unimplemented!("Unknown type"),
-        // }
+        let c = self.input.first().expect("At this point, the input should not be empty");
+        let c = *c as char;
+        match c {
+            '*' | '~' | '>' => self.deserialize_seq(visitor),
+            '%' => self.deserialize_map(visitor),
+            '+' | '-' | '$' | '(' | '!' | '=' => self.deserialize_str(visitor),
+            ':' => self.deserialize_i64(visitor),
+            '_' => self.deserialize_unit(visitor),
+            '#' => self.deserialize_bool(visitor),
+            ',' => self.deserialize_f64(visitor),
+            _ => unimplemented!("Unknown type"),
+        }
     }
 
     fn deserialize_bool<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
@@ -327,10 +316,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         // Used to create a copy of the deserializer for deserializing untagged enums of non-self-describing formats like RESP
         let bytes = self.input;
         self.input = &[];
-        assert_ne!(bytes.len(), 0);
         visitor.visit_bytes(bytes)
-
-        // Err(Error::BytesNotSupported)
     }
 
     fn deserialize_byte_buf<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
