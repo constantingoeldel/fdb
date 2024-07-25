@@ -204,7 +204,7 @@ mod test {
                             return Ok(Options::Expiry(res));
                         }
 
-                        let existence: Result<Existence, crate::parser::ParseError> = from_slice(&v);
+                        let existence: Result<Vec<Existence>, crate::parser::ParseError> = from_slice(&v);
                         if let Ok(res) = existence {
                             return Ok(Options::Existence(res));
                         }
@@ -212,6 +212,16 @@ mod test {
                         let exp_err = expiry.unwrap_err();
                         let exi_err = existence.unwrap_err();
                         Err(serde::de::Error::custom(format!("No fitting option found. \nError for Expiry was: {}\nError for Existence was: {}", exp_err, exi_err)))
+                    }
+                }
+                
+                let c = <Content as serde::Deserialize>::deserialize(deserializer)?;
+                let des = ContentRefDeserializer::new(&c);
+                
+                des.
+                match c {
+                    Content::Bytes(b) => {
+                        
                     }
                 }
 

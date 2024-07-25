@@ -302,14 +302,14 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     fn deserialize_bytes<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
         // Consume the entire input and return it as bytes
         // Used to create a copy of the deserializer for deserializing untagged enums of non-self-describing formats like RESP
-        visitor.visit_borrowed_bytes(self.input)
+        visitor.visit_bytes(self.input)
     }
-
 
     fn deserialize_byte_buf<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
-        visitor.visit_byte_buf(self.input)
+        Err(Error::BytesNotSupported)
         
     }
+
 
     fn deserialize_option<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
         if let Ok((i, _n)) = null(self.input) {
