@@ -28,24 +28,10 @@ impl<'de> Deserializer<'de> {
         Deserializer { input: input.as_bytes() }
     }
 
-    // pub fn from_reader(input: &'de mut dyn std::io::Read) -> std::io::Result<Self> {
-    //     let mut buf = Vec::new();
-    //     input.read_to_end(&mut buf)?;
-    //     Ok(Deserializer { input: buf.as_bytes() })
-    // }
-
-    // fn deserialize_float<T>(mut self) -> Result<T> where T: From<i64> + From<f64> {
-    //     let int = self.deserialize_int();
-    //
-    //     if int.is_ok() {
-    //         int
-    //     } else {
-    //         let (i, double) = Double::try_parse(&self.input)?;
-    //         self.input = i;
-    //         let float: f64 = double.into();
-    //         Ok(float.into())
-    //     }
-    // }
+    pub fn from_reader(input: &'de mut dyn std::io::Read, buf: &'de mut Vec<u8>) -> std::io::Result<Self> {
+        input.read_to_end(buf)?;
+        Ok(Deserializer { input: buf.as_slice() })
+    }
 }
 
 
