@@ -56,20 +56,20 @@ pub fn from_str<'a, T>(s: &'a str) -> Result<T>
     from_slice(s.as_bytes())
 }
 
-// pub fn from_reader<'a, T, R>(reader: &'a mut R) -> std::io::Result<T>
-//     where
-//         T: serde::de::Deserialize<'a>,
-//         R: std::io::Read,
-// {
-//     let mut deserializer = Deserializer::from_reader(reader)?;
-//     let t = T::deserialize(&mut deserializer)?;
-//
-//     if deserializer.input.is_empty() {
-//         Ok(t)
-//     } else {
-//         Err(Error::TrailingCharacters.into())
-//     }
-// }
+pub fn from_reader<'a, T>(input: &'a mut dyn std::io::Read) -> Result<T>
+    where
+        T: serde::de::DeserializeOwned,
+{
+    let mut buf = Vec::new();
+    let mut deserializer = Deserializer::from_reader(input, &mut buf)?;
+    let t = T::deserialize(&mut deserializer)?;
+
+    if deserializer.input.is_empty() {
+        Ok(t)
+    } else {
+        Err(Error::TrailingCharacters)
+    }
+}
 
 const ARRAY: char = '*';
 const SET: char = '~';
