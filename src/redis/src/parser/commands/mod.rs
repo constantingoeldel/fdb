@@ -1,4 +1,3 @@
-
 use serde::Deserialize;
 
 use macro_derive::DeserializeUntagged;
@@ -11,6 +10,7 @@ mod hello;
 mod set;
 mod getdel;
 mod xadd;
+mod test;
 
 
 #[derive(DeserializeUntagged, Debug, Eq, PartialEq)]

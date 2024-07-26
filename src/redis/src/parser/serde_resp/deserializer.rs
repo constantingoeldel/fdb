@@ -81,6 +81,10 @@ const TERM: &str = "\r\n";
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
+    fn get_underlying_buffer(&self) -> &[u8] {
+        self.input
+    }
+
     fn deserialize_any<V>(self, visitor: V) -> std::result::Result<V::Value, Self::Error> where V: Visitor<'de> {
         eprintln!("deserialize_any does not make sense for non-self-describing formats like RESP! Check that you are using the correct deserialization method. It is fine for the basic types of RESP like integers, doubles, strings, and arrays but not for e.g. Redis command option parsing.");
 
@@ -420,7 +424,6 @@ impl<'de, 'a> EnumAccess<'de> for Enum<'a, 'de> {
         // dbg!(std::str::from_utf8(self.de.input).unwrap());
 
         let variant = seed.deserialize(&mut *self.de)?;
-        dbg!(std::str::from_utf8(self.de.input).unwrap());
         Ok((variant, self))
     }
 }

@@ -19,8 +19,7 @@ async fn main() -> Result<(), io::Error> {
     listener.set_ttl(100).expect("Could not set TTL");
     let fdb_client = fdb::Client::new().await.expect("Could not initialize foundation db client");
     let db = fdb_client.database().unwrap();
-
-
+    
     loop {
         let (mut socket, address) = listener.accept().await?;
 
@@ -31,7 +30,9 @@ async fn main() -> Result<(), io::Error> {
 
         println!("{:?}", buf);
 
+        let now = std::time::Instant::now();
         let cmd: Result<Commands, ParseError> = parser::from_slice(&buf);
+        println!("Elapsed: {:?}", now.elapsed());
         match cmd {
             Ok(cmd) => {
                 dbg!(cmd);

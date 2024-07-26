@@ -59,11 +59,8 @@ impl<'a> TryParse<'a> for Integer {
     type Output = Self;
     fn try_parse(value: &'a [u8]) -> Result<(&'a [u8], Self::Output), nom::error::Error<&'a [u8]>> {
         let (i, num) = alt((integer, big_number, string))(value).finish()?;
-        dbg!(std::str::from_utf8(num));
         let (j, sign) = opt(sign)(num).finish()?;
-        dbg!(sign);
         let (j, digits) = parse_digits(j).finish()?;
-        dbg!(digits);
         assert_eq!(j.len(), 0);
 
         // If there is no explicit sign, assume positive int

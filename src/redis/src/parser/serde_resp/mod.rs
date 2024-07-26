@@ -3,7 +3,7 @@ use std::fmt::Display;
 use serde::{de, ser};
 use thiserror::Error;
 
-pub use deserializer::{from_slice, Slice, Deserializer};
+pub use deserializer::{Deserializer, from_slice, Slice};
 
 mod deserializer;
 mod serializer;
@@ -46,6 +46,11 @@ pub enum Error {
     
     #[error("Error when parsing a string as an integer: {0}")]
     ParseInt(#[from] std::num::ParseIntError),
+
+    /// Error when specifying options that are mutually exlusive, like XX and NX in SET
+    #[error("ERR syntax error"
+    )] // <- Is the reply from the official Redis server (Does any client rely on this?)
+    Syntax,
 }
 
 impl<'a> From<nom::error::Error<&'a [u8]>> for Error {
@@ -336,7 +341,6 @@ mod test {
 
         let res: Result<TestInt> = from_slice(s);
         assert!(res.is_err());
-        dbg!(res);
     }
 
     #[test]
