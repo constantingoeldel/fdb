@@ -1,120 +1,89 @@
-use nom::{Finish, IResult};
-use nom::bytes::complete::tag;
-use nom::combinator::opt;
-use nom::sequence::tuple;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer};
+use serde::de::{Error, SeqAccess, Visitor};
 
-use crate::parser::protocol::{integer, string, TryParse};
-use crate::parser::protocol::integer::Integer;
+use macro_derive::*;
 
-#[derive(Deserialize, Serialize, Debug)]
+use crate::parser::commands::Command;
+
+use super::{CError, CResult, Response};
+
+#[derive(Deserialize, Debug, Eq, PartialEq)]
 pub struct Hello {
-    pub options: Option<ClientHandshakeOptions>,
+    cmd: HELLO,
+    #[serde(default)]
+    options: Options
 }
 
-#[derive(Deserialize, Serialize, Debug)]
-pub struct ClientHandshakeOptions {
-    pub protocol_version: i64,
-    pub auth: Option<AuthUsernamePassword>,
-    pub setname: Option<SetClientName>,
+#[derive(Deserialize, Debug, Eq, PartialEq)]
+struct HELLO;
+
+// TODO: Eigentlich sind AUTH und SETNAME conditional on protover >= 2
+// Wie checken?
+#[derive(Options, Debug, Eq, PartialEq, Default)]
+struct Options {
+    protover: Option<u8>,
+    auth: Option<Auth>,
+    setname: Option<SetClientName>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
-struct AuthUsernamePassword {
+#[derive(Deserialize, Debug, Eq, PartialEq)]
+struct Auth {
+    cmd: AUTH,
     username: String,
     password: String,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Debug, Eq, PartialEq)]
+struct AUTH;
+
+#[derive(Deserialize, Debug, Eq, PartialEq)]
 struct SetClientName {
+    cmd: SETNAME,
     clientname: String,
 }
 
+#[derive(Deserialize, Debug, Eq, PartialEq)]
+struct SETNAME;
 
-impl<'a> TryParse<'a> for Hello {
-    type Output = Self;
 
-    fn try_parse(value: &'a[u8]) -> Result<(&'a[u8], Self::Output), nom::error::Error<&'a[u8]>> {
-        let (i, ch) = client_handshake(value).finish()?;
-        Ok((i, ch))
+#[cfg(test)]
+mod tests {
+    use crate::parser::from_slice;
+
+    use super::*;
+
+    #[test]
+    fn test_hello() {
+        let s = b"*7\r\n$5\r\nHELLO\r\n$1\r\n3\r\n$4\r\nAUTH\r\n$1\r\nc\r\n$1\r\ng\r\n$7\r\nSETNAME\r\n$4\r\ntest\r\n";
+
+        let res: Hello = from_slice(s).unwrap();
+        assert_eq!(res, Hello {
+            cmd: HELLO,
+            options: Options {
+                protover: Some(3),
+                auth: Some(Auth {
+                    cmd: AUTH,
+                    username: "c".to_string(),
+                    password: "g".to_string(),
+                }),
+                setname: Some(SetClientName {
+                    cmd: SETNAME,
+                    clientname: "test".to_string(),
+                }),
+            },
+        });
     }
 }
 
-
-fn client_handshake(i: &[u8]) -> IResult<&[u8], Hello> {
-    fn hello(i: &[u8]) -> IResult<&[u8], &[u8]> {
-        let (i, str) = (string)(i)?;
-        let (j, cmd) = tag("HELLO")(str)?;
-        assert!(j.is_empty());
-        Ok((i, cmd))
-    }
-
-    fn auth(i: &[u8]) -> IResult<&[u8], &[u8]> {
-        let (i, str) = (string)(i)?;
-        let (j, cmd) = tag("AUTH")(str)?;
-        assert!(j.is_empty());
-        Ok((i, cmd))
-    }
-
-    fn protocol_version(i: &[u8]) -> IResult<&[u8], &[u8]> {
-        integer(i)
-    }
-
-    fn auth_username_password(i: &[u8]) -> IResult<&[u8], AuthUsernamePassword> {
-        let (i, (_, username, password)) = tuple((auth, string, string))(i)?;
-
-        Ok((i, AuthUsernamePassword {
-            username: String::from_utf8(Vec::from(username)).unwrap(),
-            password: String::from_utf8(Vec::from(password)).unwrap(),
-        }))
-    }
-
-    fn setname(i: &[u8]) -> IResult<&[u8], &[u8]> {
-        let (i, str) = (string)(i)?;
-        let (j, cmd) = tag("SETNAME")(str)?;
-        assert!(j.is_empty());
-        Ok((i, cmd))
-    }
-
-    fn set_client_name(i: &[u8]) -> IResult<&[u8], SetClientName> {
-        let (i, (_, client)) = tuple((setname, string))(i)?;
-
-        Ok((i, SetClientName {
-            clientname: String::from_utf8(Vec::from(client)).unwrap(),
-        }))
-    }
-
-    let (i, (_, options)) = tuple((hello, opt(tuple((protocol_version, opt(auth_username_password), opt(set_client_name))))))(i)?;
-
-
-    let mut ch = ClientHandshakeOptions {
-        protocol_version: 2,
-        auth: None,
-        setname: None,
-    };
-
-    if let Some((protocol_version, auth, setname)) = options {
-        let (_, protocol_version) = Integer::try_parse(protocol_version).unwrap();
-        let protocol_version : i64 = protocol_version.into();
-        assert!((2..=3).contains(&protocol_version));
-        ch.protocol_version = protocol_version;
-
-        if let Some(auth) = auth {
-            ch.auth = Some(auth);
+impl Command for Hello {
+    // fn exec(self) -> impl Into<Response> {
+    //
+    //     todo!("Answer with list/map of server properties")
+    // }
+    fn check_integrity(&self) -> CResult<()> {
+        if !(self.options.protover.is_none() || self.options.protover == Some(3) || self.options.protover == Some(2)) {
+            return Err(CError::InvalidProtocolVersion);
         }
-
-        if let Some(setname) = setname {
-            ch.setname = Some(setname);
-        }
+        Ok(())
     }
-
-    let handshake = Hello {
-        options: Some(ch),
-    };
-
-    Ok((i, handshake))
-}
-
-#[test]
-fn test_client_handshake() {
 }

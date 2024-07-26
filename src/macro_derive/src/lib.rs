@@ -177,10 +177,10 @@ fn impl_options(ast: &syn::DeriveInput) -> TokenStream {
 
         quote! {
             OptionsEnum::#field_name_cap(#field_name) => {
-                if options.#field_name.is_some() {
+                if __options.#field_name.is_some() {
                     return Err(serde::de::Error::duplicate_field(stringify!(#field_name)));
                 }
-                options.#field_name = Some(#field_name);
+                __options.#field_name = Some(#field_name);
             },
         }
     }
@@ -194,37 +194,40 @@ fn impl_options(ast: &syn::DeriveInput) -> TokenStream {
                 where
                     D: serde::Deserializer<'de>,
             {
+                #[derive(DeserializeUntagged, Debug, Eq, PartialEq)]
+                enum OptionsEnum {
+                    #(#options_enum_variants)*
+                }
+
+                struct OptionsVisitor;
+
+                impl<'de> serde::de::Visitor<'de> for OptionsVisitor {
+                    type Value = #name;
+
+                    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> std::fmt::Result {
+                        formatter.write_str("One or more variants of the enum")
+                    }
+
+                    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where A: serde::de::SeqAccess<'de> {
+                        let mut __options = #name::default();
+
+                        while let Ok(Some(option)) = seq.next_element() {
+
+                            match option {
+                                #(#options_enum_matches)*
+                            }
+                        }
+
+                        Ok(__options)
+                    }
+                }
+
+
                 deserializer.deserialize_seq(OptionsVisitor)
             }
         }
 
-        #[derive(DeserializeUntagged, Debug, Eq, PartialEq)]
-        enum OptionsEnum {
-            #(#options_enum_variants)*
-        }
 
-        struct OptionsVisitor;
-
-        impl<'de> serde::de::Visitor<'de> for OptionsVisitor {
-            type Value = #name;
-
-            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                formatter.write_str("One or more variants of the enum")
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where A: serde::de::SeqAccess<'de> {
-                let mut options = #name::default();
-
-                while let Ok(Some(option)) = seq.next_element() {
-
-                    match option {
-                        #(#options_enum_matches)*
-                    }
-                }
-
-                Ok(options)
-            }
-        }
     };
     gen.into()
 }
